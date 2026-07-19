@@ -17,7 +17,7 @@ const articles = defineCollection({
         source_url: z.string().url(),
         topic: z.enum([
           "政治", "经济", "社会", "科技", "军事",
-          "外交", "文化", "环境", "其他",
+          "外交", "文化", "环境", "电影", "娱乐", "其他",
         ]),
         title_cn: z.string(),
         summary_cn: z.string(),

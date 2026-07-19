@@ -300,6 +300,40 @@ a:hover { text-decoration: underline; }
   .news-card .summary { font-size: 13px; }
 }
 
+/* ===== 类型筛选 chip ===== */
+.type-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 24px;
+  padding: 0;
+}
+.type-filter .chip {
+  display: inline-block;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-family: var(--font-sans);
+  color: var(--color-ink-muted);
+  background: var(--color-paper);
+  border: 1px solid var(--color-divider);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.4;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.type-filter .chip:hover {
+  color: var(--color-ink);
+  border-color: var(--color-ink-muted);
+}
+.type-filter .chip--active {
+  color: #fff;
+  background: var(--color-ink);
+  border-color: var(--color-ink);
+  font-weight: 600;
+}
+
 /* ===== 无限滚动 ===== */
 
 /* 哨兵：不可见但占位 */
@@ -604,4 +638,100 @@ a:hover { text-decoration: underline; }
 .share-modal__btn:hover {
   background: var(--color-paper);
   border-color: var(--color-ink-muted);
+}
+
+/* ===== 强化移动端适配 ===== */
+
+/* 平板及以下（含 768px 以下） */
+@media (max-width: 768px) {
+  .container { padding: 0 16px; }
+
+  .site-header { padding: 24px 0 16px; margin-bottom: 24px; }
+  .site-title { font-size: 26px; letter-spacing: 2px; }
+  .site-subtitle { font-size: 12px; }
+
+  .date-bar { font-size: 13px; margin: 4px 0 18px; letter-spacing: 1px; }
+
+  /* chip 横向滚动，避免换行占屏 */
+  .type-filter {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -16px 20px;
+    padding: 4px 16px 8px;
+    scrollbar-width: thin;
+    position: relative;
+  }
+  .type-filter::-webkit-scrollbar { height: 3px; }
+  .type-filter::-webkit-scrollbar-thumb { background: var(--color-divider); }
+  .type-filter .chip { flex-shrink: 0; }
+
+  /* 对擂分栏堆叠 */
+  .versus-grid { gap: 20px; }
+
+  /* 卡片紧凑 */
+  .news-card { padding: 14px 16px; }
+  .news-card .title { font-size: 16px; line-height: 1.5; margin-bottom: 8px; }
+  .news-card .summary { font-size: 13.5px; line-height: 1.65; margin-bottom: 10px; }
+  .news-card .quote { font-size: 14px; padding: 10px 12px 10px 14px; margin-bottom: 10px; }
+  .news-card .quote .quote-mark { font-size: 24px; }
+
+  /* source-bar 紧凑 */
+  .news-card .source-bar { font-size: 11.5px; gap: 6px; }
+  .news-card .source-bar .source-link { font-size: 11px; }
+
+  /* meta 紧凑 */
+  .news-card .meta { font-size: 11.5px; gap: 8px; }
+  .news-card .meta .topic-tag { padding: 2px 8px; font-size: 11px; }
+
+  /* 列头 */
+  .column-header { padding: 12px 16px; font-size: 16px; letter-spacing: 1px; }
+  .column-header .badge { font-size: 10px; }
+
+  /* 免责声明 */
+  .disclaimer { margin-top: 36px; padding: 20px 0; font-size: 11.5px; line-height: 1.7; }
+}
+
+/* 小屏手机（480px 以下） */
+@media (max-width: 480px) {
+  .site-title { font-size: 22px; letter-spacing: 1px; }
+  .site-subtitle { font-size: 11px; }
+  .date-bar { font-size: 12px; }
+
+  .news-card { padding: 12px 14px; }
+  .news-card .title { font-size: 15.5px; }
+  .news-card .summary { font-size: 13px; }
+  .news-card .quote { font-size: 13.5px; padding: 9px 10px 9px 12px; }
+
+  .column-header { padding: 10px 14px; font-size: 15px; }
+
+  /* 防止 iPhone Safari 点击高亮闪烁 */
+  a, button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* 触屏点击目标放大 */
+  .type-filter .chip { padding: 8px 14px; font-size: 12.5px; }
+  .source-link { padding: 4px 2px; }
+
+  /* 长按链接不弹菜单 */
+  a { -webkit-touch-callout: none; }
+  .news-card .title, .news-card .source-link { -webkit-touch-callout: default; }
+}
+
+/* 触屏设备：禁用 hover 效果避免闪烁 */
+@media (hover: none) {
+  .type-filter .chip:hover,
+  .news-card .meta .share-btn:hover,
+  .news-card .title:hover,
+  .news-card .source-link:hover,
+  .share-modal__close:hover,
+  .share-modal__btn:hover,
+  .back-to-top:hover {
+    background: inherit;
+    color: inherit;
+    border-color: inherit;
+    transform: none;
+  }
 }

@@ -1,10 +1,24 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import Flag from "../components/Flag.astro";
 ---
 
 <BaseLayout title="羊毛群嘲讽日报 · Satire Daily">
   <div class="date-bar">羊毛群嘲讽日报 · 借嘴说话，左右对擂</div>
+
+  <nav class="type-filter" id="type-filter" aria-label="类型筛选">
+    <button class="chip chip--active" data-topic="全部">全部</button>
+    <button class="chip" data-topic="政治">政治</button>
+    <button class="chip" data-topic="经济">经济</button>
+    <button class="chip" data-topic="社会">社会</button>
+    <button class="chip" data-topic="科技">科技</button>
+    <button class="chip" data-topic="军事">军事</button>
+    <button class="chip" data-topic="外交">外交</button>
+    <button class="chip" data-topic="文化">文化</button>
+    <button class="chip" data-topic="电影">电影</button>
+    <button class="chip" data-topic="娱乐">娱乐</button>
+    <button class="chip" data-topic="环境">环境</button>
+    <button class="chip" data-topic="其他">其他</button>
+  </nav>
 
   <div class="versus-grid">
     <section class="versus-column left">

@@ -1,6 +1,7 @@
-/* 嘲讽日报 - 无限滚动
+/* 嘲讽日报 - 无限滚动 + 类型筛选
  * 从 /articles.json 拉全部文章，按 10 条/批 append 到左右栏
  * 左右交替的 items 按 side 字段分发到对应栏
+ * 类型筛选：点击 chip 后只渲染对应 topic 的文章，重置已加载并清空 DOM
  */
 (function () {
   "use strict";
@@ -13,16 +14,20 @@
   const loader = document.getElementById("infinite-loader");
   const end = document.getElementById("infinite-end");
   const counter = document.getElementById("counter");
+  const typeFilter = document.getElementById("type-filter");
 
   if (!leftBody || !rightBody || !sentinel) return;
 
   const BATCH_SIZE = 10;
   let allItems = [];
+  let filteredItems = [];  // 按当前筛选过滤后的列表
   let loadedIndex = 0;
   let leftCount = 0;
   let rightCount = 0;
   let loading = false;
   let done = false;
+  let currentTopic = "全部";
+  let observer = null;
 
   // 国旗 emoji 映射
   const FLAGS = {
@@ -32,16 +37,24 @@
   };
   const flag = (c) => FLAGS[c] || "🌐";
 
-  // 荒诞指数可视化
   const stars = (n) => {
     const filled = Math.ceil(n / 2);
     return "★".repeat(filled) + "☆".repeat(5 - filled);
   };
 
-  // 渲染单篇文章卡片
-  // globalIndex: 该 item 在 allItems 里的下标，用于分享按钮定位
+  function escapeHtml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+  function escapeAttr(s) {
+    return escapeHtml(s).replace(/'/g, "&#39;");
+  }
+
+  // globalIndex: 该 item 在 filteredItems 里的下标，用于分享按钮定位
   function renderCard(item, globalIndex) {
-    const isLeft = item.side === "left";
     const quoteHtml = item.quote_cn
       ? `<blockquote class="quote">
            <span class="quote-mark">"</span>${escapeHtml(item.quote_cn)}<span class="quote-mark">"</span>
@@ -49,7 +62,7 @@
       : "";
 
     return `
-      <article class="news-card news-card--entering">
+      <article class="news-card news-card--entering" data-topic="${escapeAttr(item.topic)}">
         <div class="source-bar">
           <span class="flag">${flag(item.source_country)}</span>
           <span class="media">${escapeHtml(item.source)}</span>
@@ -70,33 +83,21 @@
     `;
   }
 
-  function escapeHtml(s) {
-    return String(s || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-  function escapeAttr(s) {
-    return escapeHtml(s).replace(/'/g, "&#39;");
-  }
-
-  // 渲染一批（最多 10 条）
+  // 渲染一批（最多 BATCH_SIZE 条），从 filteredItems 取
   function renderBatch() {
-    const batch = allItems.slice(loadedIndex, loadedIndex + BATCH_SIZE);
+    const batch = filteredItems.slice(loadedIndex, loadedIndex + BATCH_SIZE);
     if (batch.length === 0) {
       finish();
       return;
     }
 
-    // 移除空状态
     if (leftEmpty) leftEmpty.remove();
     if (rightEmpty) rightEmpty.remove();
 
     const leftHtml = [];
     const rightHtml = [];
     batch.forEach((item, i) => {
-      const gi = loadedIndex + i;  // 在 allItems 里的全局下标，供分享按钮定位
+      const gi = loadedIndex + i;  // 在 filteredItems 里的全局下标，供分享按钮定位
       if (item.side === "left") {
         leftHtml.push(renderCard(item, gi));
         leftCount++;
@@ -109,11 +110,10 @@
     leftBody.insertAdjacentHTML("beforeend", leftHtml.join(""));
     rightBody.insertAdjacentHTML("beforeend", rightHtml.join(""));
 
-    // 触发入场动画
     requestAnimationFrame(() => {
       document.querySelectorAll(".news-card--entering").forEach((el) => {
         el.classList.remove("news-card--entering");
-        void el.offsetWidth; // reflow
+        void el.offsetWidth;
         el.classList.add("news-card--visible");
       });
     });
@@ -121,14 +121,14 @@
     loadedIndex += batch.length;
     updateCounter();
 
-    if (loadedIndex >= allItems.length) {
+    if (loadedIndex >= filteredItems.length) {
       finish();
     }
   }
 
   function updateCounter() {
     if (!counter) return;
-    counter.textContent = `已加载 ${loadedIndex} / ${allItems.length} 条（左 ${leftCount} / 右 ${rightCount}）`;
+    counter.textContent = `${currentTopic !== "全部" ? currentTopic + " · " : ""}已加载 ${loadedIndex} / ${filteredItems.length} 条（左 ${leftCount} / 右 ${rightCount}）`;
   }
 
   function finish() {
@@ -138,7 +138,46 @@
     sentinel.style.display = "none";
     end.hidden = false;
     if (counter) {
-      counter.textContent = `全部 ${allItems.length} 条 · 左 ${leftCount} / 右 ${rightCount}`;
+      counter.textContent = `${currentTopic !== "全部" ? currentTopic + " · " : ""}全部 ${filteredItems.length} 条 · 左 ${leftCount} / 右 ${rightCount}`;
+    }
+    if (observer) observer.disconnect();
+  }
+
+  // 切换筛选：清空 DOM + 重置计数 + 重新计算 filteredItems
+  function switchFilter(topic) {
+    if (topic === currentTopic) return;
+    currentTopic = topic;
+
+    // 清空 DOM
+    leftBody.innerHTML = "";
+    rightBody.innerHTML = "";
+    leftCount = 0;
+    rightCount = 0;
+    loadedIndex = 0;
+    done = false;
+    loader.hidden = true;
+    end.hidden = true;
+    sentinel.style.display = "";
+
+    // 重新计算 filteredItems
+    if (topic === "全部") {
+      filteredItems = allItems;
+    } else {
+      filteredItems = allItems.filter((it) => it.topic === topic);
+    }
+
+    // 重新挂上 observer（如果之前断开过）
+    if (!observer) setupObserver();
+    else observer.observe(sentinel);
+
+    // 渲染首批
+    renderBatch();
+
+    // 若筛选后为空
+    if (filteredItems.length === 0) {
+      leftBody.innerHTML = '<div class="empty">该类型暂无内容</div>';
+      rightBody.innerHTML = '<div class="empty">该类型暂无内容</div>';
+      finish();
     }
   }
 
@@ -148,8 +187,8 @@
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       allItems = data.items || [];
+      filteredItems = allItems;
       renderBatch();
-      // 之后挂上 IntersectionObserver
       setupObserver();
     } catch (e) {
       console.error("[infinite] 加载 articles.json 失败", e);
@@ -159,8 +198,8 @@
   }
 
   function setupObserver() {
-    if (done) return;
-    const io = new IntersectionObserver(
+    if (observer) return;
+    observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting && !loading && !done) {
@@ -170,38 +209,56 @@
       },
       { rootMargin: "400px 0px" }
     );
-    io.observe(sentinel);
+    observer.observe(sentinel);
   }
 
   async function loadNext() {
     if (loading || done) return;
     loading = true;
     loader.hidden = false;
-    // 给浏览器一帧渲染 loader 的时间
     await new Promise((r) => requestAnimationFrame(r));
     renderBatch();
     loading = false;
     loader.hidden = true;
   }
 
-  // === 分享按钮事件委托（卡片是动态插入的，用委托） ===
+  // 绑定 chip 点击
+  if (typeFilter) {
+    typeFilter.addEventListener("click", (e) => {
+      const target = e.target.closest(".chip");
+      if (!target) return;
+      const topic = target.dataset.topic;
+      if (!topic || topic === currentTopic) return;
+
+      // 更新激活态
+      typeFilter.querySelectorAll(".chip").forEach((c) => c.classList.remove("chip--active"));
+      target.classList.add("chip--active");
+
+      switchFilter(topic);
+
+      // 滚回顶部
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
+  // === 分享按钮事件委托（卡片是动态插入的，用委托）===
   document.addEventListener("click", (e) => {
     const btn = e.target.closest(".share-btn");
     if (!btn) return;
     e.preventDefault();
     const idx = parseInt(btn.dataset.idx, 10);
-    if (isNaN(idx) || !allItems[idx]) return;
+    if (isNaN(idx) || !filteredItems[idx]) return;
     if (window.SatireDaily && window.SatireDaily.openShareModal) {
-      window.SatireDaily.openShareModal(allItems[idx]);
+      window.SatireDaily.openShareModal(filteredItems[idx]);
     } else {
       console.warn("[share] share.js 未加载，无法分享");
     }
   });
 
-  // === 回到顶部按钮（左右各一个） ===
+  // === 回到顶部按钮（左右各一个）===
   const bttLeft = document.getElementById("back-to-top-left");
   const bttRight = document.getElementById("back-to-top-right");
-  const SHOW_THRESHOLD = 400;  // 滚动超过 400px 才显示
+  const SHOW_THRESHOLD = 400;
 
   function toggleBackToTop() {
     const show = window.scrollY > SHOW_THRESHOLD;
