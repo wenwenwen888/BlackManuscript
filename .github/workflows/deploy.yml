@@ -28,6 +28,11 @@ jobs:
 
       - name: Install and Build
         working-directory: site
+        env:
+          # 默认 /BlackManuscript/（项目站点子路径）
+          # 用自定义域名时：去仓库 Settings → Secrets and variables → Actions → Variables
+          # 加一个 ASTRO_BASE = /  即可切到根路径
+          ASTRO_BASE: ${{ vars.ASTRO_BASE || '/BlackManuscript/' }}
         run: |
           npm install
           npm run build
