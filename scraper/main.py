@@ -26,7 +26,7 @@ from config import get_enabled_sources, OUTPUT_DAILY_DIR, OUTPUT_DRAFTS_DIR, SIT
 from fetcher import fetch
 from sources.base import Source, Article
 from utils.json_io import (
-    build_daily_dict, write_daily_json, filter_passed,
+    build_daily_dict, write_daily_json, filter_passed, deduplicate,
 )
 
 
@@ -148,6 +148,10 @@ def main():
     # 构建并写入 articles JSON（对接前端 articles.json schema）
     passed_left = filter_passed(left_articles)
     passed_right = filter_passed(right_articles)
+    # 去重（同一事件多源报道，按 URL + 标题前缀）
+    passed_left = deduplicate(passed_left)
+    passed_right = deduplicate(passed_right)
+    logging.info("去重后: left=%d right=%d", len(passed_left), len(passed_right))
 
     data = build_daily_dict(passed_left, passed_right)
     # 归档：按日期命名

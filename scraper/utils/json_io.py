@@ -63,6 +63,28 @@ def filter_passed(articles: list[Article]) -> list[Article]:
     return [a for a in articles if a.classify_pass and a.validate_pass is not False and a.summary_cn]
 
 
+def deduplicate(articles: list[Article]) -> list[Article]:
+    """去重：按 source_url 精确去重 + 按 title_cn 前 10 字模糊去重。
+
+    同一事件多源报道时，保留第一条（通常是最早抓到的）。
+    URL 精确去重防同一篇被重复抓；标题前缀去重防同一事件不同媒体转载。
+    """
+    seen_urls: set[str] = set()
+    seen_titles: set[str] = set()
+    result: list[Article] = []
+    for a in articles:
+        if a.url in seen_urls:
+            continue
+        title_key = (a.title_cn or a.title or "")[:10]
+        if title_key and title_key in seen_titles:
+            continue
+        seen_urls.add(a.url)
+        if title_key:
+            seen_titles.add(title_key)
+        result.append(a)
+    return result
+
+
 def detect_head_to_head(left: list[Article], right: list[Article]) -> Optional[dict]:
     """简单检测是否有同一事件被左右栏同时报道。
 
