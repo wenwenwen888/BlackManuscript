@@ -9,6 +9,8 @@ const {
   title = "羊毛群嘲讽日报 · Satire Daily",
   description = "聚合外媒涉华与中国官媒涉外报道，左右对擂呈现。本站仅做内容搬运，立场归属原媒体。",
 } = Astro.props;
+
+const ogImage = Astro.site ? new URL("favicon.svg", Astro.site).href : "";
 ---
 <!doctype html>
 <html lang="zh-CN">
@@ -18,7 +20,22 @@ const {
     <meta name="description" content={description} />
     <meta name="generator" content={Astro.generator} />
     <meta name="theme-color" content="#f7f5f0" />
+    <link rel="icon" type="image/svg+xml" href={`${import.meta.env.BASE_URL}favicon.svg`} />
     <title>{title}</title>
+
+    {/* Open Graph */}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="羊毛群嘲讽日报" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={Astro.url.href} />
+    {ogImage && <meta property="og:image" content={ogImage} />}
+
+    {/* Twitter Card */}
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    {ogImage && <meta name="twitter:image" content={ogImage} />}
   </head>
   <body>
     <header class="site-header">

@@ -148,6 +148,13 @@
     if (topic === currentTopic) return;
     currentTopic = topic;
 
+    // 更新 URL hash（刷新可恢复筛选状态）
+    if (topic === "全部") {
+      history.replaceState(null, "", location.pathname + location.search);
+    } else {
+      history.replaceState(null, "", "#topic=" + encodeURIComponent(topic));
+    }
+
     // 清空 DOM
     leftBody.innerHTML = "";
     rightBody.innerHTML = "";
@@ -188,6 +195,20 @@
       const data = await resp.json();
       allItems = data.items || [];
       filteredItems = allItems;
+
+      // 读 URL hash 恢复筛选状态（刷新页面不丢失筛选）
+      const hashMatch = location.hash.match(/^#topic=(.+)$/);
+      if (hashMatch) {
+        const topic = decodeURIComponent(hashMatch[1]);
+        const chip = typeFilter && typeFilter.querySelector('.chip[data-topic="' + topic + '"]');
+        if (chip && topic !== "全部") {
+          typeFilter.querySelectorAll(".chip").forEach((c) => c.classList.remove("chip--active"));
+          chip.classList.add("chip--active");
+          switchFilter(topic);
+          return;
+        }
+      }
+
       renderBatch();
       setupObserver();
     } catch (e) {

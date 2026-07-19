@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="32" height="64" fill="#c0392b"/>
+  <rect x="32" width="32" height="64" fill="#1e5f8e"/>
+  <text x="32" y="45" font-family="serif" font-size="34" font-weight="900" fill="#fffefb" text-anchor="middle">嘲</text>
+</svg>
