@@ -1850,6 +1850,13 @@ VARIANTS3 = [
 VARIANTS.extend(VARIANTS2)
 VARIANTS.extend(VARIANTS3)
 
+# 导入第四批补充（把不足 50 条的类型补齐）
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from variants4_part1 import VARIANTS4
+VARIANTS.extend(VARIANTS4)
+
 
 def main():
     items = list(TEMPLATES)  # 先放 25 条模板
