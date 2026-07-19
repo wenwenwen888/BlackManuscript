@@ -183,7 +183,7 @@
 
   async function loadInitial() {
     try {
-      const resp = await fetch("/articles.json");
+      const resp = await fetch((window.__BASE__ || "/") + "articles.json");
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       allItems = data.items || [];
