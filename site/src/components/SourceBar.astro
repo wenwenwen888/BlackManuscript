@@ -1,0 +1,20 @@
+---
+import Flag from "./Flag.astro";
+
+interface Props {
+  source: string;
+  source_country: string;
+  source_url: string;
+  published: string;
+}
+const { source, source_country, source_url, published } = Astro.props;
+---
+<div class="source-bar">
+  <Flag country={source_country} />
+  <span class="media">{source}</span>
+  <span class="sep">·</span>
+  <span class="date">{published}</span>
+  <a class="source-link" href={source_url} target="_blank" rel="noopener noreferrer">
+    原文 ↗
+  </a>
+</div>

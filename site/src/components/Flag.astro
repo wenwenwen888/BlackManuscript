@@ -1,0 +1,23 @@
+---
+const { country } = Astro.props;
+
+// ISO 国家代码 → emoji 国旗
+const flags: Record<string, string> = {
+  cn: "🇨🇳",
+  uk: "🇬🇧",
+  us: "🇺🇸",
+  de: "🇩🇪",
+  fr: "🇫🇷",
+  jp: "🇯🇵",
+  ru: "🇷🇺",
+  eu: "🇪🇺",
+  in: "🇮🇳",
+  ir: "🇮🇷",
+  kr: "🇰🇷",
+  au: "🇦🇺",
+  ca: "🇨🇦",
+};
+
+const flag = flags[country] ?? "🌐";
+---
+<span class="flag" aria-label={country}>{flag}</span>

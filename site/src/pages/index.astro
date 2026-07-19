@@ -1,0 +1,72 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Flag from "../components/Flag.astro";
+---
+
+<BaseLayout title="羊毛群嘲讽日报 · Satire Daily">
+  <div class="date-bar">羊毛群嘲讽日报 · 借嘴说话，左右对擂</div>
+
+  <div class="versus-grid">
+    <section class="versus-column left">
+      <header class="column-header left">
+        <span>外媒嘲讽国内</span>
+        <span class="badge">Foreign press on China</span>
+      </header>
+      <div class="column-body" id="left-body">
+        <div class="empty" id="left-empty">加载中…</div>
+      </div>
+    </section>
+
+    <section class="versus-column right">
+      <header class="column-header right">
+        <span>中媒嘲讽海外</span>
+        <span class="badge">Chinese press on the world</span>
+      </header>
+      <div class="column-body" id="right-body">
+        <div class="empty" id="right-empty">加载中…</div>
+      </div>
+    </section>
+  </div>
+
+  <div id="infinite-sentinel" class="infinite-sentinel" aria-hidden="true"></div>
+  <div id="infinite-loader" class="infinite-loader" hidden>
+    <span class="loader-dot"></span>
+    <span class="loader-dot"></span>
+    <span class="loader-dot"></span>
+    <span class="loader-text">加载更多…</span>
+  </div>
+  <div id="infinite-end" class="infinite-end" hidden>
+    <span>— 到底了 —</span>
+  </div>
+
+  <p id="counter" style="margin-top: 24px; font-size: 13px; color: var(--color-ink-muted);"></p>
+
+  <!-- 回到顶部按钮：左右各一个，滚动超过阈值后显示 -->
+  <button id="back-to-top-left" class="back-to-top back-to-top--left" hidden type="button" aria-label="回到顶部">
+    <span class="back-to-top__arrow">↑</span>
+  </button>
+  <button id="back-to-top-right" class="back-to-top back-to-top--right" hidden type="button" aria-label="回到顶部">
+    <span class="back-to-top__arrow">↑</span>
+  </button>
+
+  <!-- 分享弹层：点卡片分享按钮后弹出，长按图片可发送到微信 -->
+  <div id="share-modal" class="share-modal" hidden role="dialog" aria-modal="true" aria-label="分享卡片">
+    <div class="share-modal__panel">
+      <div class="share-modal__head">
+        <span class="share-modal__title">分享到微信</span>
+        <button id="share-close" class="share-modal__close" type="button" aria-label="关闭">×</button>
+      </div>
+      <div id="share-image-holder" class="share-modal__image"></div>
+      <p class="share-modal__tip">
+        <strong>微信内：</strong>长按图片 → 发送给朋友 / 保存到手机<br />
+        <strong>浏览器：</strong>点下方按钮下载，再手动发到微信
+      </p>
+      <div class="share-modal__actions">
+        <button id="share-download" class="share-modal__btn" type="button">下载图片</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/share.js" defer></script>
+  <script src="/infinite-scroll.js" defer></script>
+</BaseLayout>

@@ -1,0 +1,43 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+const {
+  title = "羊毛群嘲讽日报 · Satire Daily",
+  description = "聚合外媒涉华与中国官媒涉外报道，左右对擂呈现。本站仅做内容搬运，立场归属原媒体。",
+} = Astro.props;
+---
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container">
+        <h1 class="site-title">羊毛群嘲讽日报</h1>
+        <span class="site-subtitle">Satire Daily · 借嘴说话，左右对擂</span>
+      </div>
+    </header>
+    <main class="container">
+      <slot />
+      <footer class="disclaimer">
+        <p>
+          <strong>声明：</strong>本站为内容聚合站，仅做摘要与原文链接搬运，
+          版权及立场全部归属原媒体，不代表本站观点。原文请以来源链接为准。
+        </p>
+        <p>
+          左栏收录外媒涉华报道（原文为英文的以中文摘要呈现），
+          右栏收录中国官媒涉外报道。两侧内容均由原媒体立场决定，本站不做改写与立场加工。
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>
