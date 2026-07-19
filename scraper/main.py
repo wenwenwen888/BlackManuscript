@@ -22,11 +22,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # prompts 目录也要加（pipeline.py 里需要）
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "prompts"))
 
-from config import get_enabled_sources, OUTPUT_DAILY_DIR, OUTPUT_DRAFTS_DIR, SITE_DAILY_DIR
+from config import get_enabled_sources, OUTPUT_DAILY_DIR, OUTPUT_DRAFTS_DIR, SITE_DAILY_DIR, SITE_DIR
 from fetcher import fetch
 from sources.base import Source, Article
 from utils.json_io import (
-    build_daily_dict, write_daily_json, filter_passed, detect_head_to_head,
+    build_daily_dict, write_daily_json, filter_passed,
 )
 
 
@@ -145,22 +145,25 @@ def main():
             print(f"  [{a.side}] {a.source:<20} {a.published}  body={len(a.body):>5}  {a.title[:60]}")
         return
 
-    # 构建并写入 daily JSON
-    # head_to_head 检测
+    # 构建并写入 articles JSON（对接前端 articles.json schema）
     passed_left = filter_passed(left_articles)
     passed_right = filter_passed(right_articles)
-    head_to_head = detect_head_to_head(passed_left, passed_right)
 
-    data = build_daily_dict(args.date, passed_left, passed_right, head_to_head)
-    out_path = write_daily_json(data, OUTPUT_DAILY_DIR)
-    logging.info("写入 daily JSON: %s (left=%d right=%d)",
-                 out_path, len(passed_left), len(passed_right))
+    data = build_daily_dict(passed_left, passed_right)
+    # 归档：按日期命名
+    out_path = write_daily_json(data, OUTPUT_DAILY_DIR, date=args.date)
+    logging.info("写入归档 JSON: %s (left=%d right=%d, total items=%d)",
+                 out_path, len(passed_left), len(passed_right), len(data["items"]))
 
     if args.sync_site:
         SITE_DAILY_DIR.mkdir(parents=True, exist_ok=True)
-        dest = SITE_DAILY_DIR / Path(out_path).name
-        shutil.copy2(out_path, dest)
-        logging.info("已同步到 site: %s", dest)
+        public_dir = SITE_DIR / "public"
+        public_dir.mkdir(parents=True, exist_ok=True)
+        # 同步到 site/src/content/daily/articles.json（schema 校验）
+        shutil.copy2(out_path, SITE_DAILY_DIR / "articles.json")
+        # 同步到 site/public/articles.json（客户端 fetch）
+        shutil.copy2(out_path, public_dir / "articles.json")
+        logging.info("已同步到 site: content/daily/articles.json + public/articles.json")
 
 
 if __name__ == "__main__":

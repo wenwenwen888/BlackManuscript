@@ -230,30 +230,6 @@ a:hover { text-decoration: underline; }
   letter-spacing: 1px;
 }
 
-/* 今日对擂高亮 */
-.head-to-head {
-  background: linear-gradient(90deg, var(--color-left-bg) 0%, var(--color-right-bg) 100%);
-  border: 1px solid var(--color-divider);
-  border-radius: 4px;
-  padding: 20px 24px;
-  margin-bottom: 32px;
-}
-.head-to-head .label {
-  font-family: var(--font-serif);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 3px;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.head-to-head .note {
-  font-size: 14px;
-  color: var(--color-ink-muted);
-  margin: 0;
-}
-
 /* 空状态 */
 .empty {
   padding: 40px 20px;
@@ -273,20 +249,6 @@ a:hover { text-decoration: underline; }
 }
 .disclaimer strong {
   color: var(--color-ink);
-}
-
-/* 归档列表 */
-.archive-list {
-  list-style: none;
-  padding: 0;
-}
-.archive-list li {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--color-divider);
-}
-.archive-list a {
-  font-family: var(--font-serif);
-  font-size: 16px;
 }
 
 /* 响应式：移动端保持左右两栏并排（对擂是核心卖点，不堆叠）
@@ -369,41 +331,6 @@ a:hover { text-decoration: underline; }
   font-size: 14px;
   letter-spacing: 4px;
   opacity: 0.6;
-}
-
-/* 日期分隔 */
-.day-divider {
-  text-align: center;
-  margin: 48px 0 32px;
-  position: relative;
-  color: var(--color-ink-muted);
-  font-family: var(--font-serif);
-  font-size: 13px;
-  letter-spacing: 2px;
-}
-.day-divider::before,
-.day-divider::after {
-  content: "";
-  display: inline-block;
-  width: 80px;
-  height: 1px;
-  background: var(--color-divider);
-  vertical-align: middle;
-  margin: 0 16px;
-}
-
-/* day-content 入场动画（默认透明，JS 加载后加 visible 类） */
-.day-content {
-  transition: opacity 0.4s ease, transform 0.4s ease;
-}
-/* 通过 JS fetch append 进来的 day-content 默认带 opacity 0 */
-.day-content:not(:first-child) {
-  opacity: 0;
-  transform: translateY(20px);
-}
-.day-content--visible {
-  opacity: 1 !important;
-  transform: translateY(0) !important;
 }
 
 /* 卡片入场动画（无限滚动加载的新卡片） */

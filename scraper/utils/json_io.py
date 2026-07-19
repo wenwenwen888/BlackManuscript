@@ -11,14 +11,24 @@ from typing import Optional
 from sources.base import Article
 
 
-def build_daily_dict(date: str, left: list[Article], right: list[Article], head_to_head: dict | None = None) -> dict:
-    """把处理后的 Article 列表组装成 daily JSON dict。"""
-    return {
-        "date": date,
-        "left": [_article_to_dict(a) for a in left],
-        "right": [_article_to_dict(a) for a in right],
-        "head_to_head": head_to_head,
-    }
+def build_daily_dict(left: list[Article], right: list[Article]) -> dict:
+    """把处理后的 Article 列表组装成前端 articles.json 格式。
+
+    输出 {items: [{side, source, ...}]}，对接 site/src/content/config.ts schema。
+    left/right 合并成扁平 items 数组，左右交替排列保证每批 10 条 = 5 左 + 5 右。
+    """
+    items = []
+    max_len = max(len(left), len(right))
+    for i in range(max_len):
+        if i < len(left):
+            d = _article_to_dict(left[i])
+            d["side"] = "left"
+            items.append(d)
+        if i < len(right):
+            d = _article_to_dict(right[i])
+            d["side"] = "right"
+            items.append(d)
+    return {"items": items}
 
 
 def _article_to_dict(a: Article) -> dict:
@@ -37,12 +47,12 @@ def _article_to_dict(a: Article) -> dict:
     return d
 
 
-def write_daily_json(data: dict, output_dir: str | Path) -> str:
-    """写入 output_dir/{date}.json，返回路径。"""
+def write_daily_json(data: dict, output_dir: str | Path, date: str | None = None) -> str:
+    """写入 output_dir/{date}.json（归档用）或 articles.json（不传 date），返回路径。"""
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    date = data["date"]
-    path = out / f"{date}.json"
+    filename = f"{date}.json" if date else "articles.json"
+    path = out / filename
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     return str(path)
