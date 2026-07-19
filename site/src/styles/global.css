@@ -289,16 +289,8 @@ a:hover { text-decoration: underline; }
   font-size: 16px;
 }
 
-/* 响应式 */
-@media (max-width: 768px) {
-  .versus-grid {
-    grid-template-columns: 1fr;
-    gap: 24px;
-  }
-  .site-title { font-size: 28px; }
-  .news-card .title { font-size: 16px; }
-  .news-card .summary { font-size: 13px; }
-}
+/* 响应式：移动端保持左右两栏并排（对擂是核心卖点，不堆叠）
+   详细移动端规则见下方"强化移动端适配" */
 
 /* ===== 类型筛选 chip ===== */
 .type-filter {
@@ -667,8 +659,8 @@ a:hover { text-decoration: underline; }
   .type-filter::-webkit-scrollbar-thumb { background: var(--color-divider); }
   .type-filter .chip { flex-shrink: 0; }
 
-  /* 对擂分栏堆叠 */
-  .versus-grid { gap: 20px; }
+  /* 对擂分栏保持两栏并排（核心卖点），只缩 gap */
+  .versus-grid { gap: 16px; }
 
   /* 卡片紧凑 */
   .news-card { padding: 14px 16px; }
@@ -693,26 +685,41 @@ a:hover { text-decoration: underline; }
   .disclaimer { margin-top: 36px; padding: 20px 0; font-size: 11.5px; line-height: 1.7; }
 }
 
-/* 小屏手机（480px 以下） */
+/* 小屏手机（480px 以下）——两栏并排极致压缩 */
 @media (max-width: 480px) {
-  .site-title { font-size: 22px; letter-spacing: 1px; }
-  .site-subtitle { font-size: 11px; }
-  .date-bar { font-size: 12px; }
+  .container { padding: 0 8px; }
 
-  .news-card { padding: 12px 14px; }
-  .news-card .title { font-size: 15.5px; }
-  .news-card .summary { font-size: 13px; }
-  .news-card .quote { font-size: 13.5px; padding: 9px 10px 9px 12px; }
+  .site-title { font-size: 20px; letter-spacing: 1px; }
+  .site-subtitle { font-size: 10px; }
+  .date-bar { font-size: 11px; margin: 2px 0 12px; }
 
-  .column-header { padding: 10px 14px; font-size: 15px; }
+  /* 两栏 gap 压到最小，保证每栏有足够宽度 */
+  .versus-grid { gap: 8px; }
+
+  /* 列头压缩 */
+  .column-header { padding: 8px 10px; font-size: 13px; letter-spacing: 0.5px; }
+  .column-header .badge { font-size: 8px; }
+
+  /* 卡片极致紧凑 */
+  .news-card { padding: 10px 11px; }
+  .news-card .source-bar { font-size: 10px; gap: 4px; margin-bottom: 6px; }
+  .news-card .source-bar .flag { font-size: 11px; }
+  .news-card .source-bar .source-link { font-size: 9px; }
+  .news-card .title { font-size: 13.5px; line-height: 1.35; margin-bottom: 5px; letter-spacing: 0; }
+  .news-card .summary { font-size: 11.5px; line-height: 1.55; margin-bottom: 7px; }
+  .news-card .quote { font-size: 12px; padding: 6px 8px 6px 10px; margin-bottom: 7px; line-height: 1.5; }
+  .news-card .quote .quote-mark { font-size: 18px; }
+  .news-card .meta { font-size: 10px; gap: 4px; }
+  .news-card .meta .topic-tag { padding: 1px 6px; font-size: 9px; }
+  .news-card .meta .share-btn { padding: 2px 8px; font-size: 10px; border-radius: 10px; }
 
   /* 防止 iPhone Safari 点击高亮闪烁 */
   a, button {
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* 触屏点击目标放大 */
-  .type-filter .chip { padding: 8px 14px; font-size: 12.5px; }
+  /* 触屏点击目标 */
+  .type-filter .chip { padding: 6px 12px; font-size: 12px; }
   .source-link { padding: 4px 2px; }
 
   /* 长按链接不弹菜单 */
