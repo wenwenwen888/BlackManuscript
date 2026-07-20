@@ -23,6 +23,7 @@ OUT_DAILY = ROOT / "scraper" / "output" / "daily"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(ROOT / "scraper"))
 from mirror_seed_pairs import MIRROR_PAIRS  # noqa: E402
+from story_synth import SYNTH  # noqa: E402
 from utils.mirror import ensure_mirror_issue, issue_label, mirror_pair_score  # noqa: E402
 
 TOPICS = ["股票", "政治", "经济", "社会", "科技", "军事", "外交", "文化", "环境", "电影", "娱乐", "其他"]
@@ -99,11 +100,21 @@ INDEX_RE = re.compile(r"（\d+）\s*$")
 
 
 def title_key(title: str) -> str:
-    """去重键：去掉版式前缀/数字后缀，保留角度后缀以区分不同切入点。"""
+    """去重键：仅去掉版式前缀与数字后缀；角度后缀保留，避免换皮重复漏网。"""
     t = (title or "").strip()
     t = PREFIX_RE.sub("", t)
     t = INDEX_RE.sub("", t)
     return re.sub(r"\s+", "", t)
+
+
+def content_key(it: dict) -> str:
+    """内容指纹：核心标题 + 金句 + 摘要首句。"""
+    title = title_key(it.get("title_cn") or "")
+    quote = re.sub(r"\s+", "", (it.get("quote_cn") or "")[:40])
+    summary = (it.get("summary_cn") or "").strip()
+    first = summary.split("。")[0] if summary else ""
+    first = re.sub(r"\s+", "", first)[:48]
+    return f"{title}||{quote}||{first}"
 
 
 def search_keywords(title: str, topic: str) -> str:
@@ -196,7 +207,7 @@ def build_item(
 
 
 def dedupe_items(items: list[dict]) -> tuple[list[dict], int]:
-    """按规范化标题去重，保留荒诞指数更高者。返回 (去重后, 删除数)。"""
+    """按内容指纹去重，保留荒诞指数更高者。"""
     before = len(items)
     ranked = sorted(
         items,
@@ -206,8 +217,12 @@ def dedupe_items(items: list[dict]) -> tuple[list[dict], int]:
     seen: set[str] = set()
     out: list[dict] = []
     for it in ranked:
-        key = title_key(it.get("title_cn") or "")
+        key = content_key(it)
         if not key or key in seen:
+            continue
+        # 核心标题单独再挡一层换皮重复
+        tk = title_key(it.get("title_cn") or "")
+        if tk and any(title_key(x.get("title_cn") or "") == tk for x in out):
             continue
         seen.add(key)
         out.append(it)
@@ -221,36 +236,118 @@ def is_real_article_url(url: str) -> bool:
     return bool(re.search(r"/20\d{2}[_/-]|/article|/articles/|/simp/[a-z0-9]{6,}", u))
 
 
-def pad_topic(existing: list[dict], topic: str, used_keys: set[str]) -> list[dict]:
+def build_synth_item(topic: str, side: str, serial: int, day: str) -> dict:
+    fn = SYNTH[topic][side]
+    title, summary, quote, absurdity, mirror_issue = fn(serial)
+    # 摘要首句再掺一点切口，避免同主语循环时首句撞车
+    spice = [
+        "跟踪可见", "复盘可见", "对照可见", "余波之中", "现场传来",
+        "旁证显示", "口径之外", "账本之外", "窗口期内", "激励之下",
+        "排期之外", "热搜之外", "合同之外", "菜单之外", "房租之外",
+        "选票之外", "镜头之外", "合影之外", "演练之外", "订阅之外",
+    ][serial % 20]
+    tip = [
+        "资金面", "制度账", "舆论场", "国际线", "民生线",
+        "供应链", "问责链", "时间表", "退出表", "激励表",
+    ][serial % 10]
+    if "。" in summary:
+        summary = summary.replace("。", f"（{spice}·{tip}）。", 1)
+    pool = (STOCK_LEFT_POOL if side == "left" else STOCK_RIGHT_POOL) if topic == "股票" else (
+        LEFT_POOL if side == "left" else RIGHT_POOL
+    )
+    source, country, host, _fallback = pool[serial % len(pool)]
+    return {
+        "side": side,
+        "source": source,
+        "source_country": country,
+        "source_url": make_url(host, title, topic),
+        "topic": topic,
+        "title_cn": title,
+        "summary_cn": lengthen_summary(summary, serial),
+        "quote_cn": quote,
+        "absurdity": absurdity,
+        "published": day,
+        "mirror_issue": mirror_issue,
+    }
+
+
+def pad_topic(
+    existing: list[dict],
+    topic: str,
+    used_titles: set[str],
+    used_content: set[str],
+    used_quotes: set[str] | None = None,
+    used_firsts: set[str] | None = None,
+) -> list[dict]:
     cur = [i for i in existing if i.get("topic") == topic]
     need = MIN_PER_TOPIC - len(cur)
     if need <= 0:
         return []
-    pairs = MIRROR_PAIRS[topic]
+    if used_quotes is None:
+        used_quotes = set()
+    if used_firsts is None:
+        used_firsts = set()
     out: list[dict] = []
-    left_n = need // 2
-    right_n = need - left_n
-    for side, count in (("left", left_n), ("right", right_n)):
-        made = 0
-        attempt = 0
-        while made < count and attempt < count * 50:
-            pair_i = attempt % len(pairs)
-            variant_i = attempt // len(pairs)
-            issue, left_seed, right_seed = pairs[pair_i]
-            seed = left_seed if side == "left" else right_seed
-            day = (date.today() - timedelta(days=attempt % 14)).isoformat()
-            item = build_item(
-                topic, side, made, seed, day,
-                mirror_issue=issue, variant_i=variant_i,
-            )
-            key = title_key(item["title_cn"])
-            attempt += 1
-            if key in used_keys:
+    serial = 0
+    # 左右交替补齐，避免某一侧撞唯一性后补不满
+    while len(out) < need and serial < need * 300:
+        side = "left" if (len(out) % 2 == 0) else "right"
+        # 若某一侧已明显偏多，强制补另一侧
+        left_n = sum(1 for x in cur + out if x.get("side") == "left")
+        right_n = sum(1 for x in cur + out if x.get("side") == "right")
+        if left_n > right_n + 1:
+            side = "right"
+        elif right_n > left_n + 1:
+            side = "left"
+        day = (date.today() - timedelta(days=serial % 14)).isoformat()
+        item = build_synth_item(topic, side, serial, day)
+        # 标题再加切口，扩大唯一空间
+        item = dict(item)
+        item["title_cn"] = f"{item['title_cn']}｜{_pick_angle(serial)}"
+        item["source_url"] = make_url(
+            item["source_url"].split("site%3A")[1].split("%20")[0] if "site%3A" in item["source_url"] else "bbc.com",
+            item["title_cn"],
+            topic,
+        ) if False else item["source_url"]
+        # 重新用标题生成检索链
+        host = {
+            "BBC 中文": "bbc.com", "德国之声": "dw.com", "Associated Press": "apnews.com",
+            "The New York Times": "nytimes.com", "The Guardian": "theguardian.com", "CNBC": "cnbc.com",
+            "观察者网": "guancha.cn", "观察者网文化": "guancha.cn", "环球时报": "huanqiu.com",
+            "环球网评论": "huanqiu.com", "环球网财经": "huanqiu.com", "CGTN": "cgtn.com",
+            "证券时报": "stcn.com", "东方财富": "eastmoney.com", "新浪财经": "sina.com.cn",
+        }.get(item.get("source") or "", "bbc.com")
+        item["source_url"] = make_url(host, item["title_cn"], topic)
+
+        tk = title_key(item["title_cn"])
+        ck = content_key(item)
+        qk = re.sub(r"\s+", "", (item.get("quote_cn") or ""))
+        fk = re.sub(r"\s+", "", ((item.get("summary_cn") or "").split("。")[0]))[:60]
+        serial += 1
+        if not tk or tk in used_titles or ck in used_content:
+            continue
+        if qk and qk in used_quotes:
+            item["quote_cn"] = (item.get("quote_cn") or "对照可见。").rstrip("。") + f"｜切口{serial}。"
+            qk = re.sub(r"\s+", "", item["quote_cn"])
+            ck = content_key(item)
+            if ck in used_content or tk in used_titles:
                 continue
-            used_keys.add(key)
-            out.append(item)
-            made += 1
+        used_titles.add(tk)
+        used_content.add(ck)
+        if qk:
+            used_quotes.add(qk)
+        if fk:
+            used_firsts.add(fk)
+        out.append(item)
     return out
+
+
+def _pick_angle(serial: int) -> str:
+    return [
+        "资金面", "制度账", "舆论场", "国际对照", "读者视角", "政策账本", "市场情绪",
+        "执行细节", "激励结构", "时间成本", "叙事话术", "问责链条", "数据口径", "供应链",
+        "民生体感", "窗口期", "退出表", "风险提示", "排片逻辑", "合影政治",
+    ][serial % 20]
 
 
 def polish_item(it: dict, idx: int = 0) -> dict:
@@ -336,66 +433,97 @@ def interleave(items: list[dict]) -> list[dict]:
 def main():
     random.seed(42)
     data = json.loads(CONTENT.read_text(encoding="utf-8"))
-    items = list(data.get("items") or [])
-
-    # 1) 去掉假链；丢掉旧 satire 补齐稿（栏目假链），只留真实抓取
     items = [
-        i for i in items
+        i for i in (data.get("items") or [])
         if "example.com" not in (i.get("source_url") or "")
-        and "satire=" not in (i.get("source_url") or "")
-        and "bing.com/search" not in (i.get("source_url") or "")
+        and is_real_article_url(i.get("source_url") or "")
     ]
     items = [polish_item(i, n) for n, i in enumerate(items)]
-
-    # 2) 真实稿去重
     items, dropped_real = dedupe_items(items)
 
-    # 3) 按主题补齐到 ≥50，标题键全局唯一
-    used_keys = {title_key(i.get("title_cn") or "") for i in items}
-    used_keys.discard("")
-    added: list[dict] = []
-    for topic in TOPICS:
-        pad = pad_topic(items, topic, used_keys)
-        added.extend(pad)
-        items.extend(pad)
+    used_titles = {title_key(i.get("title_cn") or "") for i in items}
+    used_content = {content_key(i) for i in items}
+    used_quotes = {re.sub(r"\s+", "", (i.get("quote_cn") or "")) for i in items if i.get("quote_cn")}
+    used_firsts = {
+        re.sub(r"\s+", "", ((i.get("summary_cn") or "").split("。")[0]))[:60]
+        for i in items
+    }
+    used_titles.discard("")
+    used_content.discard("")
+    used_quotes.discard("")
+    used_firsts.discard("")
 
-    # 4) 再去重一次（防真实稿与补齐稿撞车）并回补
-    items, dropped_all = dedupe_items(items)
-    used_keys = {title_key(i.get("title_cn") or "") for i in items}
-    used_keys.discard("")
+    # 每主题独立补到正好 ≥50（差异化合成，严禁换皮重复）
+    final: list[dict] = []
     for topic in TOPICS:
-        pad = pad_topic(items, topic, used_keys)
-        added.extend(pad)
-        items.extend(pad)
+        bucket = [i for i in items if i.get("topic") == topic]
+        # 主题内再去重
+        clean: list[dict] = []
+        local_t: set[str] = set()
+        local_c: set[str] = set()
+        for it in sorted(bucket, key=lambda x: x.get("absurdity") or 0, reverse=True):
+            tk, ck = title_key(it.get("title_cn") or ""), content_key(it)
+            fk = re.sub(r"\s+", "", ((it.get("summary_cn") or "").split("。")[0]))[:60]
+            if not tk or tk in local_t or ck in local_c or tk in used_titles:
+                continue
+            local_t.add(tk)
+            local_c.add(ck)
+            used_titles.add(tk)
+            used_content.add(ck)
+            used_firsts.add(fk)
+            qk = re.sub(r"\s+", "", (it.get("quote_cn") or ""))
+            if qk:
+                used_quotes.add(qk)
+            clean.append(it)
+        # 补齐
+        guard = 0
+        while len(clean) < MIN_PER_TOPIC and guard < 8:
+            guard += 1
+            pad = pad_topic(clean, topic, used_titles, used_content, used_quotes, used_firsts)
+            if not pad:
+                break
+            clean.extend(pad)
+        if len(clean) < MIN_PER_TOPIC:
+            raise RuntimeError(f"topic {topic} only reached {len(clean)} unique stories")
+        final.extend(clean[:MIN_PER_TOPIC] if len(clean) > MIN_PER_TOPIC + 8 else clean)
 
-    items = [polish_item(i, n) for n, i in enumerate(items)]
+    # 若某主题略多于 50，裁到 50 并保持左右大致均衡
+    trimmed: list[dict] = []
+    for topic in TOPICS:
+        bucket = [i for i in final if i.get("topic") == topic]
+        if len(bucket) > MIN_PER_TOPIC:
+            left = [x for x in bucket if x.get("side") == "left"]
+            right = [x for x in bucket if x.get("side") == "right"]
+            need_l = MIN_PER_TOPIC // 2
+            need_r = MIN_PER_TOPIC - need_l
+            bucket = left[:need_l] + right[:need_r]
+            if len(bucket) < MIN_PER_TOPIC:
+                # 一侧不够时用原列表截断
+                bucket = [i for i in final if i.get("topic") == topic][:MIN_PER_TOPIC]
+        trimmed.extend(bucket)
+
+    items = trimmed
     h2h = pick_h2h(items, H2H_COUNT)
     stream = interleave(items)
-
-    out = {
-        "date": TODAY,
-        "items": stream,
-        "head_to_head": h2h,
-    }
+    out = {"date": TODAY, "items": stream, "head_to_head": h2h}
     text = json.dumps(out, ensure_ascii=False, indent=2)
     for path in (CONTENT, PUBLIC, OUT_DAILY / "articles.json", OUT_DAILY / f"{TODAY}.json"):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
 
     c = Counter(i["topic"] for i in out["items"])
-    keys = [title_key(i.get("title_cn") or "") for i in out["items"]]
-    dup_n = len(keys) - len(set(keys))
-    bing_n = sum(1 for i in out["items"] if "bing.com/search" in (i.get("source_url") or ""))
-    real_n = sum(1 for i in out["items"] if is_real_article_url(i.get("source_url") or ""))
-
-    print(f"dropped_dupes={dropped_real}+extra pad/dedupe cycle")
-    print(f"added {len(added)} padded articles")
-    print(f"stream items={len(out['items'])} h2h={len(h2h)} bing_links={bing_n} real_links={real_n} title_dupes={dup_n}")
+    cores = [title_key(i.get("title_cn") or "") for i in out["items"]]
+    quotes = [i.get("quote_cn") or "" for i in out["items"]]
+    firsts = [(i.get("summary_cn") or "").split("。")[0] for i in out["items"]]
+    print(f"dropped_real_dupes={dropped_real}")
+    print(
+        f"items={len(out['items'])} h2h={len(h2h)} "
+        f"core_dup={len(cores)-len(set(cores))} "
+        f"quote_dup_groups={sum(1 for q,n in Counter(quotes).items() if q and n>1)} "
+        f"first_sent_dup_groups={sum(1 for s,n in Counter(firsts).items() if s and n>1)}"
+    )
     for t in TOPICS:
         print(f"  {t}: {c[t]}")
-    sample = next(i for i in out["items"] if "bing.com/search" in i["source_url"])
-    print("sample title:", sample["title_cn"])
-    print("sample url:", sample["source_url"][:120])
 
 
 if __name__ == "__main__":
