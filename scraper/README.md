@@ -57,7 +57,7 @@ python scraper/main.py --max-per-side 12 --sync-site
   → 黑名单 → classify → process → validate（失败硬拦截进 drafts）
   → 去重（同 URL / 标题前缀，保留荒诞指数更高）
   → 每边 rank_and_limit
-  → detect_head_to_head（同主题才配对，不强凑）
+  → detect_head_to_heads（同 topic + 同镜像议题才配对，不强凑）
   → output/daily/{date}.json
   → --sync-site → site/src/content/daily/articles.json（主）
                  → site/public/articles.json（副本）
@@ -67,5 +67,5 @@ python scraper/main.py --max-per-side 12 --sync-site
 
 1. **源适配统一接口**：新增源只加一个 `sources/*.py`。
 2. **validate 硬失败**：LLM 校验调用出错不放行。
-3. **今日对擂稀有**：同 topic + 双边荒诞指数达标才写入 `head_to_head`。
+3. **今日对擂稀有**：同 topic + 同镜像议题（如学术造假↔学术造假）+ 双边荒诞达标才写入 `head_to_head`。
 4. **本地同步上线**：不做境外 cron 时，人工/本地跑完 `--sync-site` 后 push 即可。

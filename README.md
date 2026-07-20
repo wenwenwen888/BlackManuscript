@@ -286,7 +286,7 @@ python scraper/main.py --sync-site
 
 ### 主题标签固定枚举
 
-`政治 / 经济 / 社会 / 科技 / 军事 / 外交 / 文化 / 环境 / 电影 / 娱乐 / 其他`
+`股票 / 政治 / 经济 / 社会 / 科技 / 军事 / 外交 / 文化 / 环境 / 电影 / 娱乐 / 其他`
 
 固定枚举便于归档检索，避免 LLM 自由发挥导致标签碎片化。
 
@@ -342,7 +342,7 @@ python scraper/main.py --sync-site
     source: string;
     source_country: string;           // ISO：cn/uk/us/...
     source_url: string;
-    topic: "政治" | "经济" | "社会" | "科技" | "军事" | "外交" | "文化" | "环境" | "电影" | "娱乐" | "其他";
+    topic: "股票" | "政治" | "经济" | "社会" | "科技" | "军事" | "外交" | "文化" | "环境" | "电影" | "娱乐" | "其他";
     title_cn: string;
     summary_cn: string;
     quote_cn?: string;

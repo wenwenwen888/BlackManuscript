@@ -80,6 +80,8 @@ def _article_to_dict(a: Article) -> dict:
     }
     if a.quote_cn:
         d["quote_cn"] = a.quote_cn
+    if getattr(a, "mirror_issue", None):
+        d["mirror_issue"] = a.mirror_issue
     return d
 
 
@@ -160,16 +162,19 @@ def detect_head_to_heads(
     *,
     min_absurdity: int = 5,
     limit: int = 5,
+    min_mirror_score: float = 40.0,
 ) -> list[dict]:
-    """检测多组同主题今日对擂（默认最多 5 组）。
+    """检测多组镜像议题今日对擂（默认最多 5 组）。
 
-    同 topic + 双边荒诞指数达标才配对；按得分降序取前 limit 组。
-    同一篇文章不会出现在多组对擂中。
+    硬条件：同 topic + 双边荒诞达标 + 镜像议题匹配（同 mirror_issue 或高相关）。
+    不强凑「同主题但议题完全不同」的左右稿。
     """
+    from .mirror import guess_mirror_issue, issue_label, mirror_pair_score
+
     if not left or not right or limit <= 0:
         return []
 
-    candidates: list[tuple[float, Article, Article]] = []
+    candidates: list[tuple[float, Article, Article, str]] = []
     for l in left:
         for r in right:
             if not l.topic or l.topic != r.topic:
@@ -178,29 +183,45 @@ def detect_head_to_heads(
             ra = r.absurdity or 0
             if la < min_absurdity or ra < min_absurdity:
                 continue
-            score = float(la + ra)
-            lt = set(l.title_cn or l.title or "") - _TITLE_NOISE
-            rt = set(r.title_cn or r.title or "") - _TITLE_NOISE
-            overlap = len(lt & rt)
-            score += min(overlap, 8) * 0.25
-            candidates.append((score, l, r))
+            l_text = f"{l.title_cn or l.title or ''} {l.summary_cn or ''}"
+            r_text = f"{r.title_cn or r.title or ''} {r.summary_cn or ''}"
+            li = (l.mirror_issue or "").strip() or guess_mirror_issue(l_text)
+            ri = (r.mirror_issue or "").strip() or guess_mirror_issue(r_text)
+            score = mirror_pair_score(
+                li, ri, l_text, r_text, absurdity_sum=float(la + ra),
+            )
+            if score < min_mirror_score:
+                continue
+            issue = li if li and li == ri else (li or ri)
+            candidates.append((score, l, r, issue))
 
     candidates.sort(key=lambda x: x[0], reverse=True)
     used_urls: set[str] = set()
+    used_issues: set[str] = set()
     pairs: list[dict] = []
-    for score, l, r in candidates:
+    for score, l, r, issue in candidates:
         if l.url in used_urls or r.url in used_urls:
+            continue
+        # 同一镜像议题只取一组，避免五组全是同一议题变体
+        if issue and issue in used_issues:
             continue
         used_urls.add(l.url)
         used_urls.add(r.url)
+        if issue:
+            used_issues.add(issue)
+            if not l.mirror_issue:
+                l.mirror_issue = issue
+            if not r.mirror_issue:
+                r.mirror_issue = issue
         left_dict = _article_to_dict(l)
         left_dict["side"] = "left"
         right_dict = _article_to_dict(r)
         right_dict["side"] = "right"
+        label = issue_label(issue) if issue else (l.topic or "同题")
         pairs.append({
             "left": left_dict,
             "right": right_dict,
-            "note": f"今日对擂 · {l.topic}：{l.source} vs {r.source}",
+            "note": f"今日对擂 · {label}：{l.source} vs {r.source}",
         })
         if len(pairs) >= limit:
             break

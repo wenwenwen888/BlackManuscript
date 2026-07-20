@@ -2,7 +2,7 @@ import { defineCollection, z } from "astro:content";
 
 /** 与 prompts/process.py TOPICS 保持一致 */
 const TOPIC = z.enum([
-  "政治", "经济", "社会", "科技", "军事",
+  "股票", "政治", "经济", "社会", "科技", "军事",
   "外交", "文化", "环境", "电影", "娱乐", "其他",
 ]);
 
@@ -17,6 +17,8 @@ const articleFields = {
   quote_cn: z.string().optional(),
   absurdity: z.number().int().min(1).max(10),
   published: z.string().optional(),
+  /** 镜像议题：左右互搏用（如 academic_integrity） */
+  mirror_issue: z.string().optional(),
 };
 
 const articleSchema = z.object(articleFields);

@@ -34,7 +34,7 @@ site/
 - 爬虫：`python scraper/main.py --sync-site` 会先写 content，再拷 public
 
 主题枚举与 `prompts/process.py` 对齐：
-`政治 / 经济 / 社会 / 科技 / 军事 / 外交 / 文化 / 环境 / 电影 / 娱乐 / 其他`
+`股票 / 政治 / 经济 / 社会 / 科技 / 军事 / 外交 / 文化 / 环境 / 电影 / 娱乐 / 其他`
 
 ## 运行
 

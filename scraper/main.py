@@ -294,7 +294,7 @@ def main():
         logging.info("今日对擂 %d 组: %s", len(head_to_head),
                      " | ".join(p.get("note", "") for p in head_to_head))
     else:
-        logging.info("今日无同主题对擂（不强凑）")
+        logging.info("今日无镜像议题对擂（不强凑）")
 
     data = build_daily_dict(
         passed_left, passed_right,

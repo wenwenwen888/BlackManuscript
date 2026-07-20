@@ -104,7 +104,7 @@ def main():
 
     c = Counter(i["topic"] for i in out["items"])
     print("total", len(out["items"]))
-    for t in ["政治", "经济", "社会", "科技", "军事", "外交", "文化", "环境", "电影", "娱乐", "其他"]:
+    for t in ["股票", "政治", "经济", "社会", "科技", "军事", "外交", "文化", "环境", "电影", "娱乐", "其他"]:
         print(f"  {t}: {c.get(t, 0)}")
 
 

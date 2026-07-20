@@ -176,7 +176,7 @@
           ${item.published ? `<span class="sep">·</span><span class="pub-date">${escapeHtml(item.published)}</span>` : ""}
           <span class="sep">·</span>
           <span class="topic-tag">${escapeHtml(item.topic)}</span>
-          <a class="source-link" href="${escapeAttr(item.source_url)}" target="_blank" rel="noopener noreferrer">原文 ↗</a>
+          <a class="source-link" href="${escapeAttr(item.source_url)}" target="_blank" rel="noopener noreferrer">${(item.source_url || "").includes("bing.com/search") ? "相关报道 ↗" : "原文 ↗"}</a>
         </div>
         <a class="title" href="${escapeAttr(item.source_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title_cn)}</a>
         <p class="summary">${escapeHtml(item.summary_cn)}</p>
@@ -200,7 +200,7 @@
       return;
     }
     if (h2hNote) {
-      h2hNote.textContent = `同主题左右交锋 · 共 ${headToHeadList.length} 组`;
+      h2hNote.textContent = `同议题左右互搏 · 共 ${headToHeadList.length} 组`;
     }
     const blocks = headToHeadList.map((pair, pi) => {
       const note = escapeHtml(pair.note || `对擂 ${pi + 1}`);

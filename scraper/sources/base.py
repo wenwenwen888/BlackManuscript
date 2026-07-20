@@ -36,6 +36,8 @@ class Article:
     topic: str = ""
     absurdity: int = 0
     quote_cn: str = ""
+    # 镜像议题（可选）：左右互搏用，如同属「学术造假」
+    mirror_issue: str = ""
     # 状态
     classify_pass: Optional[bool] = None
     validate_pass: Optional[bool] = None

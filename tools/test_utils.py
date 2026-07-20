@@ -46,7 +46,7 @@ def _art(**kwargs) -> Article:
 
 class TestTopics(unittest.TestCase):
     def test_topics_include_film_entertainment(self):
-        for t in ("电影", "娱乐", "政治", "其他"):
+        for t in ("股票", "电影", "娱乐", "政治", "其他"):
             self.assertIn(t, process_prompt.ALLOWED_TOPICS)
 
 
@@ -87,15 +87,26 @@ class TestRankLimit(unittest.TestCase):
 class TestHeadToHead(unittest.TestCase):
     def test_same_topic_pair(self):
         left = [_art(side="left", source="BBC", source_country="uk",
-                     url="https://l.com/1", topic="经济", absurdity=8,
-                     title_cn="中国电动车冲击欧洲市场")]
+                     url="https://l.com/1", topic="文化", absurdity=8,
+                     title_cn="中国学术造假屡禁不止撤稿潮",
+                     summary_cn="外媒追踪中国高校论文造假与学术不端。")]
         right = [_art(side="right", source="观察者网",
-                      url="https://r.com/1", topic="经济", absurdity=7,
-                      title_cn="欧洲对中国电动车加征关税")]
+                      url="https://r.com/1", topic="文化", absurdity=7,
+                      title_cn="西方学术造假与论文工厂更忙",
+                      summary_cn="中媒报道欧美撤稿潮与论文工厂产业链。")]
         hh = detect_head_to_head(left, right)
         self.assertIsNotNone(hh)
         self.assertEqual(hh["left"]["source"], "BBC")
-        self.assertIn("经济", hh["note"])
+        self.assertIn("学术", hh["note"])
+
+    def test_no_force_pair_mismatched_issue(self):
+        left = [_art(side="left", url="https://l.com/3", topic="社会", absurdity=9,
+                     title_cn="中国校园霸凌处分书很漂亮",
+                     summary_cn="外媒关注中国校园欺凌处置。")]
+        right = [_art(side="right", url="https://r.com/3", topic="社会", absurdity=9,
+                      title_cn="美国枪响成了背景音",
+                      summary_cn="中媒评论美国枪击案与控枪立法卡壳。")]
+        self.assertIsNone(detect_head_to_head(left, right))
 
     def test_no_force_pair_different_topic(self):
         left = [_art(side="left", url="https://l.com/2", topic="军事", absurdity=9)]
@@ -106,8 +117,14 @@ class TestHeadToHead(unittest.TestCase):
 class TestBuildDaily(unittest.TestCase):
     def test_removes_featured_from_items(self):
         left = [_art(side="left", source="BBC", source_country="uk",
-                     url="https://l.com/h", topic="科技", absurdity=8, title_cn="科技左")]
-        right = [_art(side="right", url="https://r.com/h", topic="科技", absurdity=8, title_cn="科技右")]
+                     url="https://l.com/h", topic="科技", absurdity=8,
+                     title_cn="中国AI审查内置进模型",
+                     summary_cn="外媒测试中国大模型对齐红线与审查。",
+                     mirror_issue="ai_alignment")]
+        right = [_art(side="right", url="https://r.com/h", topic="科技", absurdity=8,
+                      title_cn="ChatGPT幻觉写进美国新闻稿",
+                      summary_cn="中媒评论生成式AI幻觉与媒体甩锅。",
+                      mirror_issue="ai_alignment")]
         hh = detect_head_to_head(left, right)
         data = build_daily_dict(left, right, head_to_head=hh)
         self.assertTrue(data.get("head_to_head"))

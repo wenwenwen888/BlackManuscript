@@ -2,7 +2,7 @@
 import json
 
 PATH = r"G:\WorkSpaces\BlackManuscript\site\src\content\daily\2026-07-19.json"
-TOPICS = {"政治", "经济", "社会", "科技", "军事", "外交", "文化", "环境", "电影", "娱乐", "其他"}
+TOPICS = {"股票", "政治", "经济", "社会", "科技", "军事", "外交", "文化", "环境", "电影", "娱乐", "其他"}
 
 with open(PATH, encoding="utf-8") as f:
     d = json.load(f)

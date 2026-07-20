@@ -10,7 +10,7 @@ print(f"{'topic':<8} {'now':>4} {'need':>5}")
 print("-" * 20)
 total_need = 0
 # 与 prompts/process.py 对齐
-TOPICS = ["政治", "经济", "社会", "科技", "军事", "外交", "文化", "环境", "电影", "娱乐", "其他"]
+TOPICS = ["股票", "政治", "经济", "社会", "科技", "军事", "外交", "文化", "环境", "电影", "娱乐", "其他"]
 for t in TOPICS:
     n = c.get(t, 0)
     need = max(0, 50 - n)
