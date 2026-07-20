@@ -131,10 +131,13 @@ def process_article(
             return article
         article.validate_pass = True
     except LLMError as e:
-        # validate 失败不算硬错误，仍可发布但标记
-        article.validate_pass = None
+        # validate 调用失败视为硬拦截：宁可不发，避免未校验内容上线
+        article.validate_pass = False
         article.reject_reason = f"validate_error: {e}"
-        logger.warning("validate LLM error for %s: %s", article.url, e)
+        logger.error("validate LLM error for %s: %s", article.url, e)
+        if save_drafts_on_fail:
+            save_to_drafts(article, f"validate_error:{e}")
+        return article
 
     return article
 

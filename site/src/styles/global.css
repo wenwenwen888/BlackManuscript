@@ -77,6 +77,68 @@ a:hover { text-decoration: underline; }
   letter-spacing: 2px;
 }
 
+/* 今日对擂（同主题左右各一条，置顶） */
+.head-to-head {
+  margin: 0 0 28px;
+  padding: 20px 22px 22px;
+  background: var(--color-paper);
+  border: 1px solid var(--color-divider);
+  border-top: 3px solid var(--color-ink);
+}
+.head-to-head__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px 16px;
+  margin-bottom: 16px;
+}
+.head-to-head__list {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.head-to-head__pair-note {
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  margin-bottom: 10px;
+}
+.head-to-head__label {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 3px;
+}
+.head-to-head__note {
+  font-size: 13px;
+  color: var(--color-ink-muted);
+}
+.head-to-head__grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+.head-to-head__vs {
+  align-self: center;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: var(--color-ink-muted);
+  padding: 0 4px;
+}
+.head-to-head__side--left .news-card {
+  border-left: 3px solid var(--color-left);
+  background: var(--color-left-bg);
+}
+.head-to-head__side--right .news-card {
+  border-left: 3px solid var(--color-right);
+  background: var(--color-right-bg);
+}
+.news-card--h2h {
+  height: 100%;
+}
+
 /* 对擂布局 */
 .versus-grid {
   display: grid;
@@ -148,6 +210,10 @@ a:hover { text-decoration: underline; }
 }
 .news-card .source-bar .sep {
   opacity: 0.4;
+}
+.news-card .source-bar .pub-date {
+  font-size: 12px;
+  opacity: 0.75;
 }
 .news-card .source-bar .source-link {
   margin-left: auto;
@@ -286,6 +352,11 @@ a:hover { text-decoration: underline; }
   background: var(--color-ink);
   border-color: var(--color-ink);
   font-weight: 600;
+}
+.type-filter .chip--empty,
+.type-filter .chip:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 /* ===== 无限滚动 ===== */
@@ -570,6 +641,17 @@ a:hover { text-decoration: underline; }
   .site-subtitle { font-size: 12px; }
 
   .date-bar { font-size: 13px; margin: 4px 0 18px; letter-spacing: 1px; }
+
+  .head-to-head { padding: 14px 14px 16px; margin-bottom: 20px; }
+  .head-to-head__grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .head-to-head__vs {
+    text-align: center;
+    font-size: 14px;
+    padding: 4px 0;
+  }
 
   /* chip 横向滚动，避免换行占屏 */
   .type-filter {

@@ -3,7 +3,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 ---
 
 <BaseLayout title="羊毛群嘲讽日报 · Satire Daily">
-  <div class="date-bar">羊毛群嘲讽日报 · 借嘴说话，左右对擂</div>
+  <div class="date-bar" id="date-bar">羊毛群嘲讽日报 · 借嘴说话，左右对擂</div>
 
   <nav class="type-filter" id="type-filter" aria-label="类型筛选">
     <button class="chip chip--active" data-topic="全部">全部</button>
@@ -19,6 +19,15 @@ import BaseLayout from "../layouts/BaseLayout.astro";
     <button class="chip" data-topic="环境">环境</button>
     <button class="chip" data-topic="其他">其他</button>
   </nav>
+
+  <!-- 今日对擂：最多 5 组，仅在筛选「全部」时显示 -->
+  <section id="head-to-head" class="head-to-head" hidden aria-label="今日对擂">
+    <header class="head-to-head__header">
+      <span class="head-to-head__label">今日对擂</span>
+      <span id="h2h-note" class="head-to-head__note">同主题左右交锋 · 共 5 组</span>
+    </header>
+    <div id="h2h-list" class="head-to-head__list"></div>
+  </section>
 
   <div class="versus-grid">
     <section class="versus-column left">

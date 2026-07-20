@@ -26,15 +26,21 @@ def _register():
     from sources.guancha import GuanchaSource
     from sources.huanqiu import HuanqiuSource
     from sources.cgtn import CgtnSource
+    from sources.bbc import BbcSource
+    from sources.dw import DwSource
+    from sources.ap import ApSource
     return {
         "guancha": GuanchaSource,
         "huanqiu": HuanqiuSource,
         "cgtn": CgtnSource,
+        "bbc": BbcSource,
+        "dw": DwSource,
+        "ap": ApSource,
     }
 
 
-# 默认启用的源（境外 VPS 跑时再加 BBC/Reuters 等）
-DEFAULT_SOURCES = ["guancha", "huanqiu", "cgtn"]
+# 默认启用：右栏中媒 + 左栏外媒（BBC/DW/AP 国内可探达）
+DEFAULT_SOURCES = ["guancha", "huanqiu", "cgtn", "bbc", "dw", "ap"]
 
 
 def get_all_sources() -> Dict[str, Source]:

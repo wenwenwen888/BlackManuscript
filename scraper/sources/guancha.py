@@ -18,7 +18,10 @@ from sources.base import Source, Article
 
 logger = logging.getLogger(__name__)
 
-LIST_URL = "https://www.guancha.cn/internation"
+LIST_URLS = [
+    "https://www.guancha.cn/internation",  # 国际
+    "https://www.guancha.cn/culture",      # 文化/电影/娱乐补源
+]
 
 
 class GuanchaSource(Source):
@@ -27,26 +30,40 @@ class GuanchaSource(Source):
     source_country = "cn"
 
     def list_articles(self, limit: int = 20) -> list[Article]:
-        html = fetch(LIST_URL)
-        # 文章 URL 规律：/internation/YYYY_MM_DD_{aid}.shtml
-        pattern = r'href="(/(?:internation|politics|military-affairs)/\d{4}_\d{2}_\d{2}_\d+\.shtml)"[^>]*>([^<]+)</a>'
+        # 文章 URL：/{栏目}/YYYY_MM_DD_{aid}.shtml
+        pattern = (
+            r'href="(/(?:internation|politics|military-affairs|culture)'
+            r'/\d{4}_\d{2}_\d{2}_\d+\.shtml)"[^>]*>([^<]+)</a>'
+        )
         seen = set()
         articles: list[Article] = []
-        for m in re.finditer(pattern, html):
-            path, title = m.group(1), m.group(2).strip()
-            if not title or len(title) < 5:
+        per = max(3, (limit + len(LIST_URLS) - 1) // len(LIST_URLS))
+        for list_url in LIST_URLS:
+            got = 0
+            try:
+                html = fetch(list_url)
+            except Exception as e:
+                logger.warning("Guancha list %s failed: %s", list_url, e)
                 continue
-            # 过滤掉导航/栏目链接
-            if any(k in title for k in ("首页", "更多", "评论", "下载", "登录")):
-                continue
-            url = urljoin("https://www.guancha.cn", path)
-            if url in seen:
-                continue
-            seen.add(url)
-            # 从 URL 提取日期
-            date_match = re.search(r"(\d{4})_(\d{2})_(\d{2})", path)
-            published = "-".join(date_match.groups()) if date_match else ""
-            articles.append(self.make_article(url=url, title=title, published=published))
+            for m in re.finditer(pattern, html):
+                path, title = m.group(1), m.group(2).strip()
+                if not title or len(title) < 5:
+                    continue
+                if any(k in title for k in ("首页", "更多", "评论", "下载", "登录")):
+                    continue
+                # 跳过纯数字标题（列表页噪声）
+                if title.isdigit():
+                    continue
+                url = urljoin("https://www.guancha.cn", path)
+                if url in seen:
+                    continue
+                seen.add(url)
+                date_match = re.search(r"(\d{4})_(\d{2})_(\d{2})", path)
+                published = "-".join(date_match.groups()) if date_match else ""
+                articles.append(self.make_article(url=url, title=title, published=published))
+                got += 1
+                if got >= per or len(articles) >= limit:
+                    break
             if len(articles) >= limit:
                 break
         logger.info("Guancha list: %d candidates", len(articles))

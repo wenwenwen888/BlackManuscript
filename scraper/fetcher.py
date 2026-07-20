@@ -11,6 +11,7 @@ import urllib.request
 import urllib.error
 import logging
 from typing import Optional
+from urllib.parse import urlsplit, urlunsplit, quote
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ def fetch(
     自动重试 3 次（指数退避 + 抖动），失败抛最后一次异常。
     限速：同一 host 两次请求间隔 >= MIN_INTERVAL_PER_HOST 秒。
     """
+    url = _encode_url(url)
     _rate_limit(url)
 
     h = {**DEFAULT_HEADERS, **(headers or {})}
@@ -72,11 +74,24 @@ def fetch(
     raise last_exc
 
 
+def _encode_url(url: str) -> str:
+    """对 path 中的非 ASCII 字符做百分号编码（DW 中文 slug 等）。"""
+    parts = urlsplit(url)
+    if parts.path.isascii():
+        return url
+    return urlunsplit((
+        parts.scheme,
+        parts.netloc,
+        quote(parts.path, safe="/:@"),
+        parts.query,
+        parts.fragment,
+    ))
+
+
 def _rate_limit(url: str) -> None:
     """对同一 host 做最小间隔限制。"""
     try:
-        from urllib.parse import urlparse
-        host = urlparse(url).netloc
+        host = urlsplit(url).netloc
     except Exception:
         host = url
 

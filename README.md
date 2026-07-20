@@ -103,41 +103,28 @@ BlackManuscript/
 │   ├── astro.config.mjs
 │   ├── package.json
 │   ├── tsconfig.json
+│   ├── scripts/
+│   │   └── copy-articles.mjs        # 构建前：content → public
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── Flag.astro           # ISO 国家代码 → emoji 国旗
-│   │   │   ├── SourceBar.astro      # 来源条
-│   │   │   ├── NewsCard.astro       # 文章卡片（含金句块）
-│   │   │   ├── VsColumn.astro       # 左/右栏容器（遗留，index 不再用）
-│   │   │   └── HeadToHead.astro     # 今日对擂（已停用，CSS 留作死代码）
 │   │   ├── content/
-│   │   │   ├── config.ts            # articles collection schema
+│   │   │   ├── config.ts            # articles schema（含可选 head_to_head）
 │   │   │   └── daily/
-│   │   │       └── articles.json    # 统一文章流数据
+│   │   │       └── articles.json    # 【唯一数据源】统一文章流
 │   │   ├── layouts/
 │   │   │   └── BaseLayout.astro     # 全站布局 + 免责声明页脚
 │   │   ├── pages/
-│   │   │   ├── index.astro          # 首页（客户端无限滚动）
-│   │   │   └── archive/             # 历史归档（遗留路由）
+│   │   │   └── index.astro          # 首页壳层 + 今日对擂容器
 │   │   └── styles/
 │   │       └── global.css           # 全局样式
-│   └── public/                      # 静态资源（随构建部署）
-│       ├── articles.json            # 供客户端 fetch 的文章流
-│       ├── infinite-scroll.js       # 无限滚动 + 卡片渲染 + 回到顶部
+│   └── public/
+│       ├── articles.json            # 客户端 fetch（由 copy-articles / sync-site 同步）
+│       ├── infinite-scroll.js       # 无限滚动 + 对擂 + 筛选 + 回顶
 │       └── share.js                 # Canvas 分享卡片绘制
 │
-└── tools/                           # 辅助工具
-    ├── generate_articles.py         # 手写演示数据生成器（~100 条）
+└── tools/
+    ├── generate_articles.py         # 演示数据生成器
+    ├── test_utils.py                # 去重/对擂/校验等回归测试
     └── probe/                       # 抓取源可行性探查
-        ├── REPORT.md                # 探查结论报告
-        ├── cgtn_*.py                # CGTN 抓取探查
-        ├── huanqiu_*.py             # 环球时报抓取探查
-        ├── guancha_article.py       # 观察者网正文探查
-        ├── right_sources_scan.py    # 右栏源扫描
-        ├── xinhua_check.py          # 新华网（已排除，纯 SPA）
-        ├── validate_sample_data.py  # 示例数据校验
-        ├── test_scraper.py          # scraper 模块单元测试
-        └── find_quote_issues.py     # JSON 引号嵌套检查
 ```
 
 ---
@@ -182,8 +169,13 @@ npm run preview    # 本地预览构建产物
 
 ```bash
 python tools/generate_articles.py
-# 会写入 site/src/content/daily/articles.json
-# 需手动拷到 site/public/articles.json 供客户端 fetch
+# 写入 site/src/content/daily/articles.json，并同步 public/articles.json
+```
+
+工具回归测试：
+
+```bash
+python tools/test_utils.py
 ```
 
 > 注意：演示数据的 `source_url` 多为 `example.com` 占位符，仅供样式与交互验证。
@@ -196,16 +188,26 @@ python tools/generate_articles.py
 
 | 源 | 栏位 | 抓取方式 | 备注 |
 |---|---|---|---|
+| BBC 中文 | 左栏 | HTTP + 正则 | `/zhongwen/articles/{id}/simp` |
+| 德国之声（DW） | 左栏 | HTTP + 正则 | 中国专题 + 首页列表 |
+| Associated Press | 左栏 | HTTP + 正则 | `apnews.com/hub/china` |
 | 观察者网（guancha.cn） | 右栏 | HTTP + 正则 | 国际/评论栏目，无 RSS |
 | 环球时报（huanqiu.com） | 右栏 | HTTP + 正则 | SSR `<textarea>` 注水，含转引来源 |
 | CGTN（cgtn.com） | 右栏 | HTTP + 正则 | 英文评论栏目，og:title/description |
 
-### 待接入的源（需境外 VPS 验证）
+### 本地日更（推荐）
 
-左栏外媒涉华源在国内 GFW 不可达，必须在境外 VPS 上运行爬虫才能抓取：
+```bash
+# 无 OPENAI_API_KEY 时自动走启发式门控；有 key 则走 LLM 三段式
+python scraper/main.py --sync-site --min-total 50
+# 然后 git push 触发静态托管构建
+```
 
-- BBC 中文、RFI 法广、DW 德国之声
-- Reuters / AP / NYT / WSJ / The Economist / The Guardian
+规则：剔除 `example.com` 假链；左栏拒绝夸中国/嘲讽欧美的稿；右栏拒绝自夸中国成就的稿；总数默认补足 ≥50。
+
+### 待接入的源
+
+- RFI 法广、Reuters / NYT / WSJ / The Economist（部分国内不可达）
 - Reddit r/China、r/sino（二次搬运）
 
 ### 运行爬虫
@@ -226,12 +228,20 @@ python scraper/main.py --sources guancha,huanqiu
 # 每源最多抓 10 条候选
 python scraper/main.py --limit 10
 
-# 把输出同步到 site/src/content/daily/
+# 把输出同步到站点（content 为主，并拷 public）
 python scraper/main.py --sync-site
+
+# 每边最多发布 12 条（默认按荒诞指数截断；0=不截断）
+python scraper/main.py --max-per-side 12 --sync-site
+
+# 各源列表/正文健康检查（本地、不调 LLM）
+python scraper/main.py --health-check
 
 # 详细日志
 python scraper/main.py -v
 ```
+
+推荐节奏：本地跑完 `--sync-site` → `git push` → 托管自动构建。无需境外 VPS cron。
 
 ### LLM 配置（环境变量）
 
@@ -269,14 +279,14 @@ python scraper/main.py --sync-site
 4. 黑名单二次扫描（摘要 + 金句）
    └─ 命中 → drafts 池，结束
 5. validate（便宜模型）—— 摘要是否歪曲原意
-   └─ 歪曲 → drafts 池，结束
+   └─ 歪曲 **或校验调用失败** → drafts 池，结束（硬拦截，不软放行）
 ```
 
-通过所有阶段的文章写入 `scraper/output/daily/{date}.json`，可用 `--sync-site` 同步到站点。
+通过所有阶段后：去重（保留荒诞指数更高）→ 每边截断 → 检测今日对擂 → 写入 `scraper/output/daily/{date}.json`，可用 `--sync-site` 同步到站点。
 
 ### 主题标签固定枚举
 
-`政治 / 经济 / 社会 / 科技 / 军事 / 外交 / 文化 / 环境 / 其他`
+`政治 / 经济 / 社会 / 科技 / 军事 / 外交 / 文化 / 环境 / 电影 / 娱乐 / 其他`
 
 固定枚举便于归档检索，避免 LLM 自由发挥导致标签碎片化。
 
@@ -328,22 +338,28 @@ python scraper/main.py --sync-site
 ```typescript
 {
   items: Array<{
-    side: "left" | "right";          // 栏位
-    source: string;                   // 媒体名或社交账号
-    source_country: string;           // ISO 国家代码：cn/uk/us/de/fr...
-    source_url: string;               // 原文链接
-    topic: "政治" | "经济" | "社会" | "科技" | "军事" | "外交" | "文化" | "环境" | "其他";
-    title_cn: string;                 // 中文标题
-    summary_cn: string;               // 中文摘要（2-3 句）
-    quote_cn?: string;                // 金句（可选，≤60 字）
-    absurdity: number;                // 荒诞指数 1-10
-  }>
+    side: "left" | "right";
+    source: string;
+    source_country: string;           // ISO：cn/uk/us/...
+    source_url: string;
+    topic: "政治" | "经济" | "社会" | "科技" | "军事" | "外交" | "文化" | "环境" | "电影" | "娱乐" | "其他";
+    title_cn: string;
+    summary_cn: string;
+    quote_cn?: string;
+    absurdity: number;                // 1-10
+    published?: string;
+  }>;
+  head_to_head?: {                    // 可选：同主题今日对擂
+    left: /* 同上文章字段 */;
+    right: /* 同上文章字段 */;
+    note: string;
+  } | null;
 }
 ```
 
-数据文件有两份（内容相同）：
-- `site/src/content/daily/articles.json` —— Astro content collection 校验用
-- `site/public/articles.json` —— 客户端 fetch 用（部署时随构建输出）
+数据以 content 为准，public 为副本：
+- **主**：`site/src/content/daily/articles.json`
+- **副本**：`site/public/articles.json`（`npm run dev/build` 的 pre 钩子自动复制；`--sync-site` 也会双写）
 
 ### 国旗 emoji 映射
 
@@ -401,11 +417,11 @@ git@github.com:wenwenwen888/BlackManuscript.git
 ### 运营匿名性
 
 - 域名境外注册，不备案
-- 托管在 EdgeOne Pages（免主体信息）
-- 爬虫运行在境外 VPS
+- 托管在 EdgeOne Pages / GitHub Pages（免主体信息）
+- 爬虫可在本地运行后 push 上线（当前推荐）
 - Git 仓库私有
 
-> 注意：真正的匿名需要更完整的 opsec（域名注册、VPS 计费、账号注册都留痕），本项目仅在架构层面降低可追溯性。
+> 注意：真正的匿名需要更完整的 opsec，本项目仅在架构层面降低可追溯性。
 
 ---
 
@@ -413,22 +429,19 @@ git@github.com:wenwenwen888/BlackManuscript.git
 
 ### 当前状态（2026-07）
 
-- ✅ Astro 站点可跑，客户端无限滚动 + 分享 + 回到顶部
-- ✅ scraper 模块完整实现（3 个右栏源：观察者网/环球时报/CGTN）
-- ✅ LLM 三段式 pipeline + 安全阀
-- ✅ 演示数据 ~100 条（`generate_articles.py` 生成）
-- ✅ 已部署 GitHub，准备上 EdgeOne Pages
+- ✅ Astro 站点可跑，客户端无限滚动 + 分享 + 回到顶部 + 今日对擂
+- ✅ scraper：右栏三源 + LLM 三段式 + validate 硬拦截 + 去重/截断
+- ✅ `--sync-site` / `copy-articles`：content 单源，public 自动同步
+- ✅ `--health-check`：本地解析健康检查
+- ✅ 演示数据（`generate_articles.py`）
+- ✅ GitHub Actions / EdgeOne Pages 静态部署
 
 ### 待办
 
-- [ ] **左栏源接入**：BBC/RFI/DW/Reuters/NYT/WSJ/Economist，待境外 VPS 验证
-- [ ] **scraper 输出对接前端**：当前 scraper 输出旧格式 `{date, left, right}`，前端已改为扁平 `{items}`，需适配
-- [ ] **去重逻辑**：同一事件多源报道合并/择优
-- [ ] **cron 调度**：境外 VPS 定时跑爬虫
-- [ ] **监控告警**：爬虫失败/站点过期检测
-- [ ] **解析器健康检查**：源站点改版导致解析失效的监控
-- [ ] **历史归档检索**：按日期/主题/来源搜索（archive 路由目前是遗留）
-- [ ] **清理死代码**：`HeadToHead.astro` 组件 + `.head-to-head` CSS + `VsColumn.astro` 遗留
+- [ ] **左栏源接入**（可在本地/有代理环境验证后再加）
+- [ ] **历史归档检索**：按日期/主题/来源搜索
+- [ ] **监控告警**（可选）：本地跑完失败时通知
+- [ ] **解析器 fixture 测试**：用录制 HTML 防源站改版静默失效
 
 ---
 

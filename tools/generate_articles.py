@@ -10,7 +10,9 @@ from pathlib import Path
 
 random.seed(42)  # 可复现
 
-OUT = Path(r"G:\WorkSpaces\BlackManuscript\site\src\content\daily\articles.json")
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / "site" / "src" / "content" / "daily" / "articles.json"
+PUBLIC_OUT = ROOT / "site" / "public" / "articles.json"
 
 # ===== 手工模板：25 条高质量文章（左右各覆盖各主题）=====
 TEMPLATES = [
@@ -1941,7 +1943,11 @@ def main():
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    PUBLIC_OUT.parent.mkdir(parents=True, exist_ok=True)
+    with open(PUBLIC_OUT, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
     print(f"written: {OUT}")
+    print(f"copied:  {PUBLIC_OUT}")
     print(f"file size: {OUT.stat().st_size} bytes")
 
 

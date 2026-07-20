@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 LIST_URLS = [
     "https://world.huanqiu.com/",          # 国际频道
     "https://opinion.huanqiu.com/",        # 社评/国际锐评
+    "https://ent.huanqiu.com/",            # 文娱/电影补源
 ]
 
 
@@ -33,7 +34,10 @@ class HuanqiuSource(Source):
     def list_articles(self, limit: int = 20) -> list[Article]:
         seen = set()
         articles: list[Article] = []
+        # 各频道均分配额，避免国际栏吃光额度导致文娱/电影为 0
+        per = max(3, (limit + len(LIST_URLS) - 1) // len(LIST_URLS))
         for list_url in LIST_URLS:
+            got = 0
             try:
                 html = fetch(list_url)
             except Exception as e:
@@ -71,8 +75,11 @@ class HuanqiuSource(Source):
                     except (ValueError, OSError):
                         pass
                 articles.append(self.make_article(url=url, title=title_clean, published=published))
-                if len(articles) >= limit:
-                    return articles
+                got += 1
+                if got >= per or len(articles) >= limit:
+                    break
+            if len(articles) >= limit:
+                break
 
         logger.info("Huanqiu list: %d candidates", len(articles))
         return articles

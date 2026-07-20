@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "sync-articles": "node scripts/copy-articles.mjs",
+    "predev": "node scripts/copy-articles.mjs",
     "dev": "astro dev",
+    "prebuild": "node scripts/copy-articles.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check"
