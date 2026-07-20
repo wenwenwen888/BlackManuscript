@@ -21,6 +21,24 @@ import BaseLayout from "../layouts/BaseLayout.astro";
     <button class="chip" data-topic="其他">其他</button>
   </nav>
 
+  <!-- 镜像搜索：搜国内词看海外镜像，搜海外词看国内镜像 -->
+  <form class="search-bar" id="search-bar" role="search" aria-label="镜像搜索">
+    <input class="search-input" id="search-input" type="search"
+      placeholder="搜国内词看海外镜像，搜海外词看国内镜像 · 如：华为智驾 / 特斯拉"
+      autocomplete="off" />
+    <button class="search-submit" id="search-submit" type="submit">镜像搜索</button>
+    <button class="search-clear" id="search-clear" type="button" hidden>清除</button>
+  </form>
+
+  <!-- 搜索结果区（搜索时显示，替代主列表） -->
+  <section id="search-results" class="search-results" hidden aria-label="镜像搜索结果">
+    <header class="search-results__header">
+      <span id="search-summary" class="search-results__summary"></span>
+      <button id="search-results-back" class="search-results__back" type="button">← 返回列表</button>
+    </header>
+    <div id="search-list" class="search-results__list"></div>
+  </section>
+
   <!-- 今日对擂：最多 5 组，仅在筛选「全部」时显示 -->
   <section id="head-to-head" class="head-to-head" hidden aria-label="今日对擂">
     <header class="head-to-head__header">

@@ -36,6 +36,18 @@
   const h2hNote = document.getElementById("h2h-note");
   const dateBar = document.getElementById("date-bar");
 
+  // === 镜像搜索元素 ===
+  const searchBar = document.getElementById("search-bar");
+  const searchInput = document.getElementById("search-input");
+  const searchClearBtn = document.getElementById("search-clear");
+  const searchResults = document.getElementById("search-results");
+  const searchSummary = document.getElementById("search-summary");
+  const searchList = document.getElementById("search-list");
+  const searchBack = document.getElementById("search-results-back");
+  const versusGrid = document.querySelector(".versus-grid");
+  let searchResultsItems = [];
+  let searchActive = false;
+
   function normalizeHeadToHead(raw) {
     if (!raw) return [];
     if (Array.isArray(raw)) return raw.filter((p) => p && p.left && p.right).slice(0, 5);
@@ -291,7 +303,18 @@
 
   // 切换筛选：清空 DOM + 重置计数 + 重新计算 filteredItems
   function switchFilter(topic) {
-    if (topic === currentTopic) return;
+    if (topic === currentTopic && !searchActive) return;
+    // 搜索态下点 chip：先退出搜索 UI（下方会重新渲染主列表）
+    if (searchActive) {
+      searchActive = false;
+      searchResultsItems = [];
+      if (searchResults) searchResults.hidden = true;
+      if (searchList) searchList.innerHTML = "";
+      if (searchClearBtn) searchClearBtn.hidden = true;
+      if (searchInput) searchInput.value = "";
+      if (versusGrid) versusGrid.style.display = "";
+      if (sentinel) sentinel.style.display = "";
+    }
     currentTopic = topic;
 
     // 更新 URL hash（刷新可恢复筛选状态）
@@ -330,6 +353,207 @@
       rightBody.innerHTML = '<div class="empty">该类型暂无内容</div>';
       finish();
     }
+  }
+
+  // === 镜像搜索：国内外实体同义词表 ===
+  // 搜国内词 → 扩展到海外实体；搜海外词 → 扩展到国内实体
+  const DOMESTIC_TO_OVERSEAS = {
+    "华为": ["特斯拉", "苹果"],
+    "比亚迪": ["特斯拉"],
+    "小米": ["苹果"],
+    "国产芯片": ["英特尔", "英伟达", "台积电"],
+    "国产大模型": ["ChatGPT", "OpenAI"],
+    "国产新能源": ["特斯拉"],
+    "国产数据库": ["谷歌"],
+    "解放军": ["美军"],
+    "海军": ["美军"],
+    "航母": ["美军", "北约"],
+    "军演": ["美军"],
+    "两会": ["国会", "议会"],
+    "城投": ["华尔街"],
+  };
+  const OVERSEAS_TO_DOMESTIC = {
+    "特斯拉": ["华为", "比亚迪", "国产新能源"],
+    "苹果": ["华为", "小米"],
+    "OpenAI": ["国产大模型"],
+    "ChatGPT": ["国产大模型"],
+    "英特尔": ["国产芯片"],
+    "英伟达": ["国产芯片"],
+    "美军": ["解放军", "海军"],
+    "北约": ["解放军"],
+    "好莱坞": ["国漫"],
+    "硅谷": ["国产芯片", "国产大模型"],
+    "美联储": ["央行"],
+    "华尔街": ["城投"],
+    "谷歌": ["国产大模型"],
+  };
+
+  function detectLeaning(q) {
+    let domestic = false, overseas = false;
+    for (const k in DOMESTIC_TO_OVERSEAS) if (q.includes(k)) domestic = true;
+    for (const k in OVERSEAS_TO_DOMESTIC) if (q.includes(k)) overseas = true;
+    if (domestic && !overseas) return "domestic";
+    if (overseas && !domestic) return "overseas";
+    return "unknown";
+  }
+
+  function expandQuery(q, leaning) {
+    const terms = new Set([q]);
+    const apply = (map) => {
+      for (const k in map) if (q.includes(k)) map[k].forEach((t) => terms.add(t));
+    };
+    if (leaning === "domestic") apply(DOMESTIC_TO_OVERSEAS);
+    else if (leaning === "overseas") apply(OVERSEAS_TO_DOMESTIC);
+    else { apply(DOMESTIC_TO_OVERSEAS); apply(OVERSEAS_TO_DOMESTIC); }
+    return [...terms];
+  }
+
+  function itemMatchesAny(item, terms) {
+    const hay = (item.title_cn || "") + (item.summary_cn || "") + (item.quote_cn || "");
+    return terms.some((t) => t && hay.includes(t));
+  }
+
+  // 镜像搜索核心：输入 Q → 返回对侧镜像结果
+  function runMirrorSearch(q) {
+    q = (q || "").trim();
+    if (!q) return null;
+    const leaning = detectLeaning(q);
+    // 检测 Q 中包含的实体词（同义词表 key），用于直接命中与镜像兜底
+    const entityTerms = [];
+    for (const k in DOMESTIC_TO_OVERSEAS) if (q.includes(k)) entityTerms.push(k);
+    for (const k in OVERSEAS_TO_DOMESTIC) if (q.includes(k)) entityTerms.push(k);
+    const directTerms = entityTerms.length > 0 ? [q, ...entityTerms] : [q];
+    const expanded = expandQuery(q, leaning);
+    // 直接命中：Q 本身或任一实体词
+    const directMatches = allItems.filter((it) => itemMatchesAny(it, directTerms));
+    // 扩展词命中（不含直接命中）
+    const expandedMatches = allItems.filter(
+      (it) => !itemMatchesAny(it, directTerms) && itemMatchesAny(it, expanded)
+    );
+    // 目标栏：国内词→右(海外)，海外词→左(国内)，未知→直接命中较多的对侧
+    let targetSide = null;
+    if (leaning === "domestic") targetSide = "right";
+    else if (leaning === "overseas") targetSide = "left";
+    else {
+      const lc = directMatches.filter((it) => it.side === "left").length;
+      const rc = directMatches.filter((it) => it.side === "right").length;
+      if (lc > rc) targetSide = "right";
+      else if (rc > lc) targetSide = "left";
+    }
+    // 镜像兜底：每个直接命中按 mirror_issue 找对侧，topic 兜底；每命中最多 5 条
+    const mirrorMap = new Map();
+    for (const dm of directMatches) {
+      const mi = dm.mirror_issue;
+      let cands = mi
+        ? allItems.filter((it) => it.side !== dm.side && it.mirror_issue === mi)
+        : [];
+      if (cands.length === 0) {
+        cands = allItems.filter((it) => it.side !== dm.side && it.topic === dm.topic);
+      }
+      cands.slice(0, 5).forEach((it) => mirrorMap.set(it.source_url, it));
+    }
+    // 合并：扩展命中 + 镜像 + 直接命中里落在目标栏的
+    const result = new Map();
+    expandedMatches.forEach((it) => result.set(it.source_url, it));
+    mirrorMap.forEach((it, url) => result.set(url, it));
+    directMatches
+      .filter((it) => targetSide && it.side === targetSide)
+      .forEach((it) => result.set(it.source_url, it));
+    let arr = [...result.values()];
+    if (targetSide) {
+      const filtered = arr.filter((it) => it.side === targetSide);
+      if (filtered.length > 0) arr = filtered;
+    }
+    // 限制结果数，避免过宽查询返回过多
+    const MAX_RESULTS = 24;
+    if (arr.length > MAX_RESULTS) arr = arr.slice(0, MAX_RESULTS);
+    return { items: arr, leaning, targetSide, directCount: directMatches.length };
+  }
+
+  // 搜索卡片：复用 renderCard 视觉，分享按钮用 data-search-idx 定位
+  function renderSearchCard(item, idx) {
+    const html = renderCard(item, -9999, "news-card--search");
+    return html.replace('data-h2h="-9999"', 'data-search-idx="' + idx + '"');
+  }
+
+  function showSearchResults(query) {
+    const res = runMirrorSearch(query);
+    if (!res) return;
+    searchResultsItems = res.items;
+    searchActive = true;
+
+    // 隐藏主列表
+    if (h2hSection) h2hSection.hidden = true;
+    if (versusGrid) versusGrid.style.display = "none";
+    if (sentinel) sentinel.style.display = "none";
+    if (loader) loader.hidden = true;
+    if (end) end.hidden = true;
+    if (counter) counter.textContent = "";
+    if (observer) observer.disconnect();
+    if (searchClearBtn) searchClearBtn.hidden = false;
+
+    const targetLabel =
+      res.targetSide === "right" ? "镜像海外"
+      : res.targetSide === "left" ? "镜像国内"
+      : "镜像结果";
+
+    if (res.items.length === 0) {
+      if (searchSummary) {
+        searchSummary.innerHTML =
+          `未找到「<span class="q">${escapeHtml(query)}</span>」的镜像新闻，换个关键词试试`;
+      }
+      if (searchList) {
+        searchList.innerHTML =
+          '<div class="search-results__empty">无结果 · 可尝试：华为 / 特斯拉 / 美军 / 城投 / 国产芯片 / 好莱坞</div>';
+      }
+    } else {
+      if (searchSummary) {
+        const tagCls = res.targetSide === "left" ? "tag tag--left" : "tag";
+        searchSummary.innerHTML =
+          `搜索「<span class="q">${escapeHtml(query)}</span>」` +
+          `<span class="${tagCls}">${targetLabel}</span> · ${res.items.length} 条`;
+      }
+      if (searchList) {
+        searchList.innerHTML = res.items
+          .map((it, i) => renderSearchCard(it, i))
+          .join("");
+        requestAnimationFrame(() => {
+          searchList.querySelectorAll(".news-card--entering").forEach((el) => {
+            el.classList.remove("news-card--entering");
+            void el.offsetWidth;
+            el.classList.add("news-card--visible");
+          });
+        });
+      }
+    }
+    if (searchResults) searchResults.hidden = false;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function clearSearch() {
+    if (!searchActive) return;
+    searchActive = false;
+    searchResultsItems = [];
+    if (searchResults) searchResults.hidden = true;
+    if (searchList) searchList.innerHTML = "";
+    if (searchInput) searchInput.value = "";
+    if (searchClearBtn) searchClearBtn.hidden = true;
+    if (versusGrid) versusGrid.style.display = "";
+    if (sentinel) sentinel.style.display = "";
+    // 重新渲染当前筛选
+    leftBody.innerHTML = "";
+    rightBody.innerHTML = "";
+    leftCount = 0;
+    rightCount = 0;
+    loadedIndex = 0;
+    done = false;
+    loader.hidden = true;
+    end.hidden = true;
+    filteredItems = itemsForTopic(currentTopic);
+    renderHeadToHead();
+    if (!observer) setupObserver();
+    else observer.observe(sentinel);
+    renderBatch();
   }
 
   async function loadInitial() {
@@ -410,7 +634,8 @@
       const target = e.target.closest(".chip");
       if (!target) return;
       const topic = target.dataset.topic;
-      if (!topic || topic === currentTopic) return;
+      if (!topic) return;
+      if (topic === currentTopic && !searchActive) return;
 
       // 更新激活态
       typeFilter.querySelectorAll(".chip").forEach((c) => c.classList.remove("chip--active"));
@@ -423,13 +648,48 @@
     });
   }
 
+  // === 镜像搜索事件绑定 ===
+  if (searchBar) {
+    searchBar.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = (searchInput && searchInput.value ? searchInput.value : "").trim();
+      if (q) showSearchResults(q);
+    });
+  }
+  if (searchClearBtn) {
+    searchClearBtn.addEventListener("click", () => {
+      if (searchActive) {
+        clearSearch();
+      } else {
+        if (searchInput) { searchInput.value = ""; searchInput.focus(); }
+        searchClearBtn.hidden = true;
+      }
+    });
+  }
+  if (searchBack) {
+    searchBack.addEventListener("click", () => clearSearch());
+  }
+  // 搜索框输入时实时显示/隐藏清除按钮
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      if (searchInput.value && !searchActive) {
+        if (searchClearBtn) searchClearBtn.hidden = false;
+      } else if (!searchInput.value && !searchActive) {
+        if (searchClearBtn) searchClearBtn.hidden = true;
+      }
+    });
+  }
+
   // === 分享按钮事件委托（卡片是动态插入的，用委托）===
   document.addEventListener("click", (e) => {
     const btn = e.target.closest(".share-btn");
     if (!btn) return;
     e.preventDefault();
     let item = null;
-    if (btn.dataset.h2h != null && headToHeadList.length) {
+    if (btn.dataset.searchIdx != null) {
+      const idx = parseInt(btn.dataset.searchIdx, 10);
+      if (!isNaN(idx)) item = searchResultsItems[idx];
+    } else if (btn.dataset.h2h != null && headToHeadList.length) {
       const code = parseInt(btn.dataset.h2h, 10);
       // 负下标编码：-(pair*2+1)=left, -(pair*2+2)=right
       const n = Math.abs(code);
