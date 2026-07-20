@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from collections import Counter
 from datetime import date, timedelta
 from pathlib import Path
@@ -189,19 +190,67 @@ VARIANTS = [
     ("现场：", "现场传来"),
 ]
 
+# 把摘要补到约 4~6 句（卡片上大约 4~6 行）
+SUMMARY_TAILS = [
+    "文章还补充了更多细节：公开表态与私下算账往往两套话术，真正的成本很少写进标题。",
+    "评论认为，热闹的叙事掩盖了制度缺口，旁观者看得越清楚，当事人越急着换话题。",
+    "报道末尾写道，口号可以日更，代价却按年结算；等账单摊开时，掌声早已散场。",
+    "有分析指出，同类事件反复出现，说明问题不在个案运气，而在激励机制本身。",
+    "读者更关心的是后续：问责名单会不会公布，补丁会不会变成下一次危机的说明书。",
+    "对照其他国家同类议题，文章讽刺道：方法不同，避责的熟练度却惊人地相似。",
+]
+
 
 def make_url(base: str, topic: str, side: str, idx: int) -> str:
     return f"{base}?satire={quote(topic)}-{side}-{idx}"
 
 
+def strip_title_index(title: str) -> str:
+    """去掉补齐时为防撞名硬加的「（数字）」后缀。"""
+    return re.sub(r"（\d+）\s*$", "", (title or "").strip())
+
+
+def sentence_count(text: str) -> int:
+    return max(1, len([p for p in (text or "").replace("！", "。").replace("？", "。").split("。") if p.strip()]))
+
+
+def lengthen_summary(summary: str, variant_i: int = 0) -> str:
+    """确保摘要约 4~6 句（卡片上大约 4~6 行，约 180~300 字）。"""
+    s = (summary or "").strip()
+    if not s:
+        s = "报道称相关争议仍在发酵，细节与责任归属尚不清晰。"
+    if not s.endswith(("。", "！", "？", "…")):
+        s += "。"
+    i = variant_i
+    target = 5 if (variant_i % 2 == 0) else 6
+    while sentence_count(s) < target or len(s) < 180:
+        s += SUMMARY_TAILS[i % len(SUMMARY_TAILS)]
+        i += 1
+        if sentence_count(s) >= 6 and len(s) >= 180:
+            break
+    # 软上限，避免卡片过长
+    if len(s) > 360:
+        cut = s[:360]
+        if "。" in cut:
+            cut = cut[: cut.rfind("。") + 1]
+        s = cut
+    return s
+
+
 def expand_seed(seed: tuple[str, str, str, int], variant_i: int) -> tuple[str, str, str, int]:
     title, summary, quote, absurdity = seed
     prefix, verb = VARIANTS[variant_i % len(VARIANTS)]
-    # 轻微改写避免完全重复
+    # 用前缀区分变体，不再在标题末尾加（数字）
     new_title = f"{prefix}{title}" if variant_i else title
-    new_summary = summary if variant_i == 0 else summary.replace("。", f"。{verb}同类现象仍在蔓延。", 1)
-    if len(new_summary) > 130:
-        new_summary = new_summary[:129] + "…"
+    if variant_i:
+        bridge = f"{verb}，同类信号仍在扩散。"
+        if "。" in summary:
+            new_summary = summary.replace("。", f"。{bridge}", 1)
+        else:
+            new_summary = summary + bridge
+    else:
+        new_summary = summary
+    new_summary = lengthen_summary(new_summary, variant_i)
     return new_title, new_summary, quote, min(10, absurdity + (variant_i % 2))
 
 
@@ -209,9 +258,6 @@ def build_item(topic: str, side: str, idx: int, seed: tuple[str, str, str, int],
     pool = LEFT_POOL if side == "left" else RIGHT_POOL
     source, country, base = pool[idx % len(pool)]
     title, summary, quote, absurdity = expand_seed(seed, idx // max(1, len(SEEDS[topic][side])))
-    # 再混一点序号避免标题键碰撞
-    if idx >= len(SEEDS[topic][side]):
-        title = f"{title}（{idx + 1}）"
     return {
         "side": side,
         "source": source,
@@ -234,7 +280,6 @@ def pad_topic(existing: list[dict], topic: str) -> list[dict]:
     seeds_left = SEEDS[topic]["left"]
     seeds_right = SEEDS[topic]["right"]
     out: list[dict] = []
-    # 尽量左右各半
     left_n = need // 2
     right_n = need - left_n
     for i in range(left_n):
@@ -246,6 +291,17 @@ def pad_topic(existing: list[dict], topic: str) -> list[dict]:
     return out
 
 
+def polish_item(it: dict, idx: int = 0) -> dict:
+    """清洗标题序号，并把偏短摘要拉长到 4~6 句。"""
+    out = dict(it)
+    out["title_cn"] = strip_title_index(out.get("title_cn") or "")
+    summary = out.get("summary_cn") or ""
+    # 补齐稿或明显偏短的摘要都加长
+    if "satire=" in (out.get("source_url") or "") or sentence_count(summary) < 4 or len(summary) < 140:
+        out["summary_cn"] = lengthen_summary(summary, idx)
+    return out
+
+
 def pick_h2h(items: list[dict], n: int = H2H_COUNT) -> list[dict]:
     by_topic: dict[str, dict[str, list]] = {}
     for it in items:
@@ -253,7 +309,6 @@ def pick_h2h(items: list[dict], n: int = H2H_COUNT) -> list[dict]:
         by_topic[it["topic"]][it["side"]].append(it)
     pairs = []
     used = set()
-    # 优先覆盖不同主题
     for topic in TOPICS:
         bucket = by_topic.get(topic) or {}
         lefts = sorted(bucket.get("left") or [], key=lambda x: x.get("absurdity", 0), reverse=True)
@@ -301,8 +356,13 @@ def main():
     random.seed(42)
     data = json.loads(CONTENT.read_text(encoding="utf-8"))
     items = list(data.get("items") or [])
-    # 去掉假链
-    items = [i for i in items if "example.com" not in (i.get("source_url") or "")]
+    # 去掉假链；丢掉旧版补齐稿，按新规则重生成（更长摘要、无标题序号）
+    items = [
+        i for i in items
+        if "example.com" not in (i.get("source_url") or "")
+        and "satire=" not in (i.get("source_url") or "")
+    ]
+    items = [polish_item(i, n) for n, i in enumerate(items)]
 
     added = []
     for topic in TOPICS:
@@ -310,9 +370,8 @@ def main():
         added.extend(pad)
         items.extend(pad)
 
+    items = [polish_item(i, n) for n, i in enumerate(items)]
     h2h = pick_h2h(items, H2H_COUNT)
-    # 对擂条目仍保留在主列表，保证分主题筛选时数量≥50；
-    # 前端在「全部」流里会跳过已上对擂的 URL，避免重复卡片。
     stream = interleave(items)
 
     out = {
@@ -330,6 +389,10 @@ def main():
     c = Counter(i["topic"] for i in out["items"])
     for t in TOPICS:
         print(f"  {t}: {c[t]}")
+    # 抽检
+    sample = next(i for i in out["items"] if "satire=" in i["source_url"])
+    print("sample title:", sample["title_cn"])
+    print("sample summary sentences:", sentence_count(sample["summary_cn"]), "chars:", len(sample["summary_cn"]))
 
 
 if __name__ == "__main__":

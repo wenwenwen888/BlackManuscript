@@ -108,13 +108,13 @@
       const topic = chip.dataset.topic;
       if (!topic) return;
       if (topic === "全部") {
-        chip.textContent = `全部 ${allItems.length}`;
+        chip.textContent = "全部";
         chip.disabled = false;
         chip.classList.remove("chip--empty");
         return;
       }
       const n = counts[topic] || 0;
-      chip.textContent = `${topic} ${n}`;
+      chip.textContent = topic;
       chip.disabled = n === 0;
       chip.classList.toggle("chip--empty", n === 0);
       if (n === 0 && currentTopic === topic) needReset = true;
