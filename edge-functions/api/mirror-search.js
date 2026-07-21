@@ -41,10 +41,10 @@ const DOMESTIC_MIRROR = [
     topic: "科技",
     exclude: ["华为", "乾崑", "问界", "Huawei"],
     queries: [
-      { q: "Tesla Autopilot crash pedestrian", lang: "en" },
-      { q: "Waymo robotaxi accident", lang: "en" },
       { q: "特斯拉 自动驾驶 撞人", lang: "zh" },
-      { q: "FSD fatal crash", lang: "en" },
+      { q: "特斯拉 Autopilot 事故", lang: "zh" },
+      { q: "Waymo 无人车 撞人", lang: "zh" },
+      { q: "Tesla Autopilot crash pedestrian", lang: "en" },
     ],
     explanation: "华为智驾事故 → 镜像特斯拉/Waymo 等海外智驾事故",
   },
@@ -54,9 +54,9 @@ const DOMESTIC_MIRROR = [
     topic: "科技",
     exclude: ["比亚迪", "BYD"],
     queries: [
-      { q: "Tesla Autopilot crash", lang: "en" },
       { q: "特斯拉 智驾 事故", lang: "zh" },
-      { q: "EV autonomous driving fatality", lang: "en" },
+      { q: "特斯拉 自动驾驶 撞人", lang: "zh" },
+      { q: "Tesla Autopilot crash", lang: "en" },
     ],
     explanation: "比亚迪智驾议题 → 镜像特斯拉等海外电动车智驾事故",
   },
@@ -66,10 +66,10 @@ const DOMESTIC_MIRROR = [
     topic: "电影",
     exclude: ["哪吒", "国漫"],
     queries: [
+      { q: "好莱坞 动画 票房", lang: "zh" },
+      { q: "迪士尼 皮克斯 票房", lang: "zh" },
       { q: "Hollywood box office animation", lang: "en" },
       { q: "Disney Pixar box office", lang: "en" },
-      { q: "好莱坞 动画 票房", lang: "zh" },
-      { q: "Marvel movie box office controversy", lang: "en" },
     ],
     explanation: "国产动画/哪吒 → 镜像好莱坞动画与票房新闻",
   },
@@ -79,10 +79,10 @@ const DOMESTIC_MIRROR = [
     topic: "科技",
     exclude: ["华为", "小米", "Huawei", "Xiaomi"],
     queries: [
-      { q: "Apple antitrust Europe", lang: "en" },
-      { q: "Tesla Autopilot controversy", lang: "en" },
-      { q: "OpenAI safety controversy", lang: "en" },
       { q: "特斯拉 争议", lang: "zh" },
+      { q: "苹果 反垄断", lang: "zh" },
+      { q: "OpenAI 安全争议", lang: "zh" },
+      { q: "Tesla Autopilot controversy", lang: "en" },
     ],
     explanation: "国产科技主体 → 镜像苹果/特斯拉/OpenAI 等海外对照",
   },
@@ -305,58 +305,85 @@ function truncate(s, n) {
   return t.slice(0, n - 1).trim() + "…";
 }
 
-function makeSpicyQuote(title, side, i) {
-  // 自然短评，不再硬套「——现场如此」收束
-  const domestic = [
+function looksEnglish(s) {
+  const t = String(s || "");
+  const letters = (t.match(/[A-Za-z]/g) || []).length;
+  const cjk = (t.match(/[\u4e00-\u9fff]/g) || []).length;
+  return letters >= 12 && letters > cjk * 2;
+}
+
+function makeSpicyQuote(title, side, i, topic) {
+  const tech = [
+    "智驾很忙，责任很闲。",
+    "辅助驾驶一出事，说明书先逃遁。",
+    "功能名很满，边界很空。",
+    "宣传里全自动，事故里全人工。",
+    "算法很自信，行人很脆弱。",
+    "更新日志很长，问责名单很短。",
+    "方向盘能放手，锅甩得更快。",
+    "试点很热闹，复盘很安静。",
+  ];
+  const film = [
     "票房数字会说话，叙事更会化妆。",
-    "热闹是真的，追问常常迟到。",
-    "标题先高潮，细节后补课。",
-    "胜利声明很满，账本未必同步。",
-    "流量到了，问题还在排队。",
-    "掌声整齐时，最该听沉默。",
     "神话好写，复盘难写。",
+    "档期很满，口碑另算。",
     "热搜有保质期，争议没有。",
   ];
-  const overseas = [
-    "外媒镜头很利，语境常常裁切。",
+  const generic = [
+    "热闹是真的，追问常常迟到。",
+    "标题先高潮，细节后补课。",
     "立场先入座，事实后入座。",
-    "批评很响亮，对照很选择性。",
-    "故事好卖，完整度另算。",
-    "标题有锋芒，背景常缺席。",
     "叙事很忙，复杂性很闲。",
-    "结论先到，材料后补。",
-    "热闹的是议题，安静的是证据。",
   ];
-  const pool = side === "left" ? overseas : domestic;
+  const hay = `${title || ""} ${topic || ""}`;
+  let pool = generic;
+  if (/科技|智驾|自动驾驶|撞|事故|Tesla|Autopilot|Waymo|crash/i.test(hay)) pool = tech;
+  else if (/电影|票房|动画|好莱坞|哪吒/i.test(hay)) pool = film;
+  else if (side === "left") pool = generic;
   return pool[i % pool.length];
 }
 
-async function spiceQuotesWithAi(items, env) {
+async function localizeCards(items, env, userQuery) {
   const API_KEY = (env && env.AI_API_KEY) || "";
-  if (!API_KEY || items.length === 0) return items;
+  if (!API_KEY || !items.length) return items;
+
   const BASE = String((env && env.AI_BASE_URL) || "https://coding.92onegame.com/v1").replace(/\/$/, "");
   const MODEL = (env && env.AI_MODEL) || "auto";
-  const sample = items.slice(0, 12);
-  const payload = sample.map((it, i) => `${i + 1}. ${it.title_cn}`).join("\n");
+  const payload = items
+    .slice(0, 12)
+    .map(
+      (it, i) =>
+        `${i + 1}.\n标题: ${it.title_cn}\n摘要: ${it.summary_cn}`
+    )
+    .join("\n\n");
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 14000);
   try {
-    const resp = await fetch(`${BASE}/chat/completions`, {
+    const resp = await fetch(BASE + "/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${API_KEY}`,
+        Authorization: "Bearer " + API_KEY,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: MODEL,
-        temperature: 0.7,
+        temperature: 0.3,
         messages: [
           {
             role: "system",
             content:
-              "你是嘲讽日报的辣评写手。根据每条新闻标题，写一句自然、口语化的中文讽刺短评。要求：12~28字；像人随口吐槽；不要用「——现场如此」「——账本如此」这类固定收束；不要加括号标签如「中媒镜像」；不要引号；只输出 JSON 字符串数组，顺序与输入一致。",
+              "你是嘲讽日报编辑。用户正在做镜像搜索。\n" +
+              "对每条新闻输出中文：title（标题翻译/润色成自然中文）、summary（摘要翻译成中文，40~70字）、quote（一句贴题辣评，12~28字，口语讽刺，禁止票房套话除非真是电影票房新闻）。\n" +
+              "只输出 JSON 数组，元素形如 {\"title\":\"\",\"summary\":\"\",\"quote\":\"\"}，顺序与输入一致。不要 markdown。",
           },
-          { role: "user", content: payload },
+          {
+            role: "user",
+            content: `用户原查询：${userQuery}\n\n待处理新闻：\n${payload}`,
+          },
         ],
       }),
+      signal: ctrl.signal,
     });
     if (!resp.ok) return items;
     const data = await resp.json();
@@ -364,15 +391,23 @@ async function spiceQuotesWithAi(items, env) {
     const arr = JSON.parse(extractJson(content));
     if (!Array.isArray(arr)) return items;
     return items.map((it, i) => {
-      let q = i < arr.length && arr[i] ? String(arr[i]).trim() : "";
-      q = q.replace(/^["「『]|["」』]$/g, "").trim();
-      // 清掉旧模板尾巴
-      q = q.replace(/（[^）]*镜像[^）]*）/g, "").replace(/——[^。]*如此。?/g, "").trim();
-      if (!q || q.length < 6) return it;
-      return { ...it, quote_cn: q.slice(0, 40) };
+      const row = arr[i] || {};
+      const title = truncate(stripHtml(row.title || it.title_cn), 80);
+      const summary = truncate(stripHtml(row.summary || it.summary_cn), 140);
+      let quote = stripHtml(row.quote || it.quote_cn);
+      quote = quote.replace(/^["「『]|["」』]$/g, "").trim().slice(0, 40);
+      return {
+        ...it,
+        title_cn: title || it.title_cn,
+        summary_cn: summary || it.summary_cn,
+        quote_cn: quote || it.quote_cn,
+        translated: Boolean(row.title || row.summary),
+      };
     });
   } catch {
     return items;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -560,9 +595,8 @@ async function liveSearch(plan) {
   const seen = new Set();
   const out = [];
   const queries = [...(plan.queries || [])].slice(0, 3);
-  if (plan.target_side === "right") {
-    queries.sort((a, b) => (a.lang === "en" ? 0 : 1) - (b.lang === "en" ? 0 : 1));
-  }
+  // 优先中文检索结果，英文源后面再翻译
+  queries.sort((a, b) => (a.lang === "zh" ? 0 : 1) - (b.lang === "zh" ? 0 : 1));
   const jobs = queries.map(async (query) => {
     const rows = [];
     // 海外镜像优先英文 Bing；中文查询再用 Google
@@ -609,7 +643,7 @@ function toCards(rows, plan) {
       side,
       title_cn: title,
       summary_cn: summary,
-      quote_cn: makeSpicyQuote(title, side, i),
+      quote_cn: makeSpicyQuote(title, side, i, plan.topic_hint),
       source: truncate(stripHtml(row.source || host), 32),
       source_url: row.link,
       source_country: guessCountry(host, side),
@@ -635,8 +669,8 @@ async function handlePost(request, env) {
 
   const plan = await planWithAi(q, env || {});
   const rows = await liveSearch(plan);
-  // 边缘环境优先速度：辣评用本地短句，不再二次调用 LLM
-  const items = toCards(rows, plan);
+  let items = toCards(rows, plan);
+  items = await localizeCards(items, env || {}, q);
   return jsonResp(200, {
     q,
     leaning: plan.leaning,
