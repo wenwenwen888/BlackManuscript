@@ -152,6 +152,7 @@ function heuristicPlan(q) {
       exclude_terms: dRule.exclude || [],
       explanation: dRule.explanation,
       queries: dRule.queries,
+      strong: true,
     };
   }
   if (oRule) {
@@ -162,6 +163,7 @@ function heuristicPlan(q) {
       exclude_terms: oRule.exclude || [],
       explanation: oRule.explanation,
       queries: oRule.queries,
+      strong: true,
     };
   }
 
@@ -486,29 +488,36 @@ async function fetchGoogleNews(q, hl) {
 
 async function planWithAi(q, env) {
   const fallback = { ...heuristicPlan(q), source: "heuristic" };
+  // 规则已能精准镜像（如华为智驾→特斯拉）时跳过 LLM，显著降延迟
+  if (fallback.strong) return fallback;
+
   const API_KEY = (env && env.AI_API_KEY) || "";
   if (!API_KEY) return fallback;
+
   const BASE = String((env && env.AI_BASE_URL) || "https://coding.92onegame.com/v1").replace(/\/$/, "");
   const MODEL = (env && env.AI_MODEL) || "auto";
-  const resp = await fetch(BASE + "/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer " + API_KEY,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: q.slice(0, 200) },
-      ],
-    }),
-  });
-  if (!resp.ok) return fallback;
-  const data = await resp.json();
-  const content = data?.choices?.[0]?.message?.content || "";
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
+    const resp = await fetch(BASE + "/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: SYSTEM },
+          { role: "user", content: q.slice(0, 200) },
+        ],
+      }),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) return fallback;
+    const data = await resp.json();
+    const content = data?.choices?.[0]?.message?.content || "";
     const plan = JSON.parse(extractJson(content));
     const leaning = ["domestic", "overseas", "unknown"].includes(plan.leaning) ? plan.leaning : "unknown";
     let target_side = plan.target_side;
@@ -522,7 +531,7 @@ async function planWithAi(q, env) {
             lang: x?.lang === "en" ? "en" : "zh",
           }))
           .filter((x) => x.q)
-          .slice(0, 4)
+          .slice(0, 3)
       : [];
     if (queries.length === 0) return fallback;
     const exclude_terms = Array.isArray(plan.exclude_terms)
@@ -542,27 +551,32 @@ async function planWithAi(q, env) {
     };
   } catch {
     return fallback;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 async function liveSearch(plan) {
   const seen = new Set();
   const out = [];
-  const queries = [...(plan.queries || [])].slice(0, 4);
+  const queries = [...(plan.queries || [])].slice(0, 3);
   if (plan.target_side === "right") {
     queries.sort((a, b) => (a.lang === "en" ? 0 : 1) - (b.lang === "en" ? 0 : 1));
   }
   const jobs = queries.map(async (query) => {
     const rows = [];
+    // 海外镜像优先英文 Bing；中文查询再用 Google
     try {
       rows.push(...(await fetchBingNews(query.q, query.lang)));
     } catch {
       /* ignore */
     }
-    try {
-      rows.push(...(await fetchGoogleNews(query.q, query.lang)));
-    } catch {
-      /* ignore */
+    if (rows.length < 4) {
+      try {
+        rows.push(...(await fetchGoogleNews(query.q, query.lang)));
+      } catch {
+        /* ignore */
+      }
     }
     return rows;
   });
@@ -573,10 +587,10 @@ async function liveSearch(plan) {
       if (!key || seen.has(key)) continue;
       seen.add(key);
       out.push(row);
-      if (out.length >= 24) break;
+      if (out.length >= 20) break;
     }
   }
-  return filterMirroredRows(out, plan).slice(0, 16);
+  return filterMirroredRows(out, plan).slice(0, 12);
 }
 
 function toCards(rows, plan) {
@@ -621,8 +635,8 @@ async function handlePost(request, env) {
 
   const plan = await planWithAi(q, env || {});
   const rows = await liveSearch(plan);
-  let items = toCards(rows, plan);
-  items = await spiceQuotesWithAi(items, env || {});
+  // 边缘环境优先速度：辣评用本地短句，不再二次调用 LLM
+  const items = toCards(rows, plan);
   return jsonResp(200, {
     q,
     leaning: plan.leaning,

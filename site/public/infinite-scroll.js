@@ -607,7 +607,8 @@
     const base = window.__BASE__ || "/";
     const url = base.replace(/\/?$/, "/") + "api/mirror-search";
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 25000);
+    // 联网检索含多次 RSS，给足时间；超时单独提示
+    const timer = setTimeout(() => ctrl.abort(), 55000);
     try {
       const resp = await fetch(url, {
         method: "POST",
@@ -615,9 +616,17 @@
         body: JSON.stringify({ q }),
         signal: ctrl.signal,
       });
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      if (!resp.ok) {
+        const err = new Error("HTTP " + resp.status);
+        err.code = "HTTP_" + resp.status;
+        throw err;
+      }
       const data = await resp.json();
-      if (!data || data.error) throw new Error(data && data.error ? data.error : "bad response");
+      if (!data || data.error) {
+        const err = new Error(data && data.error ? data.error : "bad response");
+        err.code = "BAD_BODY";
+        throw err;
+      }
       return {
         items: Array.isArray(data.items) ? data.items : [],
         leaning: data.leaning || "unknown",
@@ -627,6 +636,13 @@
         planSource: data.plan_source || "",
         queries: data.queries || [],
       };
+    } catch (e) {
+      if (e && e.name === "AbortError") {
+        const err = new Error("timeout");
+        err.code = "TIMEOUT";
+        throw err;
+      }
+      throw e;
     } finally {
       clearTimeout(timer);
     }
@@ -754,13 +770,18 @@
       console.error("[mirror-search] live search failed", e);
       searchResultsItems = [];
       searchActive = true;
+      const code = e && e.code ? e.code : "";
+      let tip = "边缘检索暂时失败，请稍后重试";
+      if (code === "TIMEOUT") tip = "检索超时，请再试一次（高峰期可能稍慢）";
+      else if (String(code).indexOf("HTTP_404") === 0) tip = "边缘函数未部署：/api/mirror-search 返回 404";
+      else if (String(code).indexOf("HTTP_") === 0) tip = "边缘检索返回错误 " + code;
       if (searchSummary) {
         searchSummary.innerHTML =
-          `实时搜索失败「<span class="q">${escapeHtml(query)}</span>」· 请稍后重试`;
+          `实时搜索失败「<span class="q">${escapeHtml(query)}</span>」`;
       }
       if (searchList) {
         searchList.innerHTML =
-          '<div class="search-results__empty">边缘检索服务暂不可用（检查 /api/mirror-search 是否已部署）</div>';
+          '<div class="search-results__empty">' + tip + "</div>";
       }
       if (searchResults) searchResults.hidden = false;
     } finally {
