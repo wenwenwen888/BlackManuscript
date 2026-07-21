@@ -596,11 +596,11 @@
     };
   }
 
-  async function fetchAiMirrorPlan(q) {
+  async function fetchLiveMirrorSearch(q) {
     const base = window.__BASE__ || "/";
-    const url = base.replace(/\/?$/, "/") + "api/mirror-parse";
+    const url = base.replace(/\/?$/, "/") + "api/mirror-search";
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 12000);
+    const timer = setTimeout(() => ctrl.abort(), 25000);
     try {
       const resp = await fetch(url, {
         method: "POST",
@@ -609,10 +609,17 @@
         signal: ctrl.signal,
       });
       if (!resp.ok) throw new Error("HTTP " + resp.status);
-      const plan = await resp.json();
-      if (!plan || plan.error) throw new Error(plan && plan.error ? plan.error : "bad plan");
-      plan.source = "ai";
-      return plan;
+      const data = await resp.json();
+      if (!data || data.error) throw new Error(data && data.error ? data.error : "bad response");
+      return {
+        items: Array.isArray(data.items) ? data.items : [],
+        leaning: data.leaning || "unknown",
+        targetSide: data.target_side || null,
+        explanation: data.explanation || "",
+        source: "live",
+        planSource: data.plan_source || "",
+        queries: data.queries || [],
+      };
     } finally {
       clearTimeout(timer);
     }
@@ -641,33 +648,30 @@
       res.targetSide === "right" ? "镜像海外"
       : res.targetSide === "left" ? "镜像国内"
       : "镜像结果";
-    const sourceTag =
-      res.source === "ai"
-        ? '<span class="tag tag--ai">AI</span>'
-        : '<span class="tag tag--ai">词典</span>';
+    const sourceTag = '<span class="tag tag--ai">实时</span>';
 
     if (res.items.length === 0) {
       if (searchSummary) {
         searchSummary.innerHTML =
-          `未找到「<span class="q">${escapeHtml(query)}</span>」的镜像新闻，换个关键词试试` +
+          `未找到「<span class="q">${escapeHtml(query)}</span>」的实时镜像新闻，换个关键词试试` +
           sourceTag;
       }
       if (searchList) {
         searchList.innerHTML =
-          '<div class="search-results__empty">无结果 · 可尝试：华为智驾 / 特斯拉 / 美军 / 城投 / 国产芯片</div>';
+          '<div class="search-results__empty">无实时结果 · 可尝试：哪吒 / 华为智驾 / 特斯拉 / 美军</div>';
       }
     } else {
       if (searchSummary) {
         const tagCls = res.targetSide === "left" ? "tag tag--left" : "tag";
         const tip = res.explanation
-          ? ` · <span class="hint">${escapeHtml(res.explanation)}</span>`
+          ? `<span class="hint">${escapeHtml(res.explanation)}</span>`
           : "";
         searchSummary.innerHTML =
-          `搜索「<span class="q">${escapeHtml(query)}</span>」` +
+          `实时搜索「<span class="q">${escapeHtml(query)}</span>」` +
           `<span class="${tagCls}">${targetLabel}</span>` +
           sourceTag +
           ` · ${res.items.length} 条` +
-          tip;
+          (tip ? ` · ${tip}` : "");
       }
       if (searchList) {
         searchList.innerHTML = res.items
@@ -694,36 +698,44 @@
     if (submitBtn) {
       submitBtn.disabled = true;
       submitBtn.classList.add("is-loading");
-      submitBtn.textContent = "解析中…";
+      submitBtn.textContent = "联网检索中…";
     }
     if (searchSummary) {
-      searchSummary.innerHTML = `正在在线解析「<span class="q">${escapeHtml(query)}</span>」…`;
+      searchSummary.innerHTML = `正在实时检索「<span class="q">${escapeHtml(query)}</span>」的镜像新闻…`;
     }
     if (searchResults) searchResults.hidden = false;
     if (searchList) {
       searchList.innerHTML =
-        '<div class="search-results__empty">AI 镜像解析中，请稍候…</div>';
+        '<div class="search-results__empty">联网搜索中，请稍候…</div>';
     }
     if (h2hSection) h2hSection.hidden = true;
     if (versusGrid) versusGrid.style.display = "none";
     if (sentinel) sentinel.style.display = "none";
     if (searchClearBtn) searchClearBtn.hidden = false;
 
-    let plan = null;
     try {
-      plan = await fetchAiMirrorPlan(query);
+      const res = await fetchLiveMirrorSearch(query);
+      paintSearchResults(query, res);
     } catch (e) {
-      console.warn("[mirror-search] AI 不可用，改用本地词典", e);
+      console.error("[mirror-search] live search failed", e);
+      searchResultsItems = [];
+      searchActive = true;
+      if (searchSummary) {
+        searchSummary.innerHTML =
+          `实时搜索失败「<span class="q">${escapeHtml(query)}</span>」· 请稍后重试`;
+      }
+      if (searchList) {
+        searchList.innerHTML =
+          '<div class="search-results__empty">边缘检索服务暂不可用（检查 /api/mirror-search 是否已部署）</div>';
+      }
+      if (searchResults) searchResults.hidden = false;
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove("is-loading");
+        submitBtn.textContent = "镜像搜索";
+      }
     }
-
-    const res = runMirrorSearch(query, plan);
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.classList.remove("is-loading");
-      submitBtn.textContent = "镜像搜索";
-    }
-    if (!res) return;
-    paintSearchResults(query, res);
   }
 
   function clearSearch() {

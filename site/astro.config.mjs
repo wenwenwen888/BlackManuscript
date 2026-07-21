@@ -15,7 +15,11 @@ export default defineConfig({
   vite: {
     server: {
       proxy: {
-        // 本地：先开 node tools/ai_mirror_parse_server.js
+        // 本地：先开 node tools/ai_mirror_search_server.js
+        "/api/mirror-search": {
+          target: "http://127.0.0.1:8788",
+          changeOrigin: true,
+        },
         "/api/mirror-parse": {
           target: "http://127.0.0.1:8788",
           changeOrigin: true,
