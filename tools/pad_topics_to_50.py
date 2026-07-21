@@ -30,6 +30,8 @@ TOPICS = ["股票", "政治", "经济", "社会", "科技", "军事", "外交", 
 MIN_PER_TOPIC = 50
 H2H_COUNT = 5
 TODAY = date.today().isoformat()
+# 按日期换种子，日更时对擂与补稿顺序会变化
+DAILY_SEED = int(date.today().strftime("%Y%m%d"))
 
 # (媒体名, 国家, 站内检索 host, 可打开栏目页兜底)
 # 避开常 401/付费墙：Bloomberg / WSJ / FT / Economist / Reuters
@@ -431,7 +433,7 @@ def interleave(items: list[dict]) -> list[dict]:
 
 
 def main():
-    random.seed(42)
+    random.seed(DAILY_SEED)
     data = json.loads(CONTENT.read_text(encoding="utf-8"))
     items = [
         i for i in (data.get("items") or [])
