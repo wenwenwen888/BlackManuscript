@@ -9,25 +9,234 @@
  */
 
 const SYSTEM = `你是「嘲讽日报」实时镜像搜索规划器。
-左栏=外媒嘲讽中国；右栏=中媒嘲讽海外。
-用户输入后，你要规划「对侧」新闻检索词（不是站内库检索）。
+核心：把用户查询「镜像」到对侧世界的同类新闻，绝不是原词换个语言再搜一遍。
+
 只输出 JSON：
 {
   "leaning": "domestic" | "overseas" | "unknown",
   "target_side": "left" | "right",
   "topic_hint": "股票|政治|经济|社会|科技|军事|外交|文化|环境|电影|娱乐|其他",
-  "explanation": "一句话说明镜像逻辑",
+  "exclude_terms": ["必须排除的原侧实体，如华为"],
+  "explanation": "一句话说明镜像：原词→对侧词",
   "queries": [
-    { "q": "检索词", "lang": "zh" | "en", "market": "zh-CN" | "en-US" }
+    { "q": "检索词（必须是对侧实体+同一议题）", "lang": "zh" | "en" }
   ]
 }
-规则：
-- 国内主体（哪吒/华为/A股…）→ leaning=domestic, target_side=right
-  queries 用中文搜「海外对照话题」或英文搜外媒相关报道（如 Nezha / Chinese animation / Hollywood）
-- 海外主体（特斯拉/美军/好莱坞…）→ leaning=overseas, target_side=left
-  queries 用中文搜中媒对该海外话题的批评/嘲讽报道
-- queries 给 2~4 条，短而可搜，覆盖实体+议题`;
 
+硬性规则：
+1) 国内主体 → leaning=domestic, target_side=right
+   - 必须换成海外对照实体再搜，禁止 queries 里再出现华为/哪吒/比亚迪等原侧实体
+   - 例：华为智驾撞人 → Tesla Autopilot crash / Waymo pedestrian accident / 特斯拉 自动驾驶 撞人
+   - 例：哪吒票房 → Hollywood box office / Disney animation revenue / 好莱坞 票房
+2) 海外主体 → leaning=overseas, target_side=left
+   - 必须换成国内对照实体再搜，禁止 queries 只搜原海外实体本身
+   - 例：特斯拉撞人 → 华为 智驾 事故 / 国产自动驾驶 撞人
+3) queries 给 3~4 条：中英都要有，短而可搜，实体+议题齐全`;
+
+/** 国内实体 → 海外对照检索词 */
+const DOMESTIC_MIRROR = [
+  {
+    keys: ["华为", "乾崑", "问界"],
+    topicKeys: ["智驾", "自动驾驶", "撞人", "车祸", "事故", "ADS"],
+    topic: "科技",
+    exclude: ["华为", "乾崑", "问界", "Huawei"],
+    queries: [
+      { q: "Tesla Autopilot crash pedestrian", lang: "en" },
+      { q: "Waymo robotaxi accident", lang: "en" },
+      { q: "特斯拉 自动驾驶 撞人", lang: "zh" },
+      { q: "FSD fatal crash", lang: "en" },
+    ],
+    explanation: "华为智驾事故 → 镜像特斯拉/Waymo 等海外智驾事故",
+  },
+  {
+    keys: ["比亚迪"],
+    topicKeys: ["智驾", "自动驾驶", "撞人", "车祸", "事故"],
+    topic: "科技",
+    exclude: ["比亚迪", "BYD"],
+    queries: [
+      { q: "Tesla Autopilot crash", lang: "en" },
+      { q: "特斯拉 智驾 事故", lang: "zh" },
+      { q: "EV autonomous driving fatality", lang: "en" },
+    ],
+    explanation: "比亚迪智驾议题 → 镜像特斯拉等海外电动车智驾事故",
+  },
+  {
+    keys: ["哪吒", "国漫", "主旋律"],
+    topicKeys: ["票房", "电影", "动画"],
+    topic: "电影",
+    exclude: ["哪吒", "国漫"],
+    queries: [
+      { q: "Hollywood box office animation", lang: "en" },
+      { q: "Disney Pixar box office", lang: "en" },
+      { q: "好莱坞 动画 票房", lang: "zh" },
+      { q: "Marvel movie box office controversy", lang: "en" },
+    ],
+    explanation: "国产动画/哪吒 → 镜像好莱坞动画与票房新闻",
+  },
+  {
+    keys: ["华为", "小米", "国产芯片", "国产大模型"],
+    topicKeys: [],
+    topic: "科技",
+    exclude: ["华为", "小米", "Huawei", "Xiaomi"],
+    queries: [
+      { q: "Apple antitrust Europe", lang: "en" },
+      { q: "Tesla Autopilot controversy", lang: "en" },
+      { q: "OpenAI safety controversy", lang: "en" },
+      { q: "特斯拉 争议", lang: "zh" },
+    ],
+    explanation: "国产科技主体 → 镜像苹果/特斯拉/OpenAI 等海外对照",
+  },
+];
+
+/** 海外实体 → 国内对照检索词 */
+const OVERSEAS_MIRROR = [
+  {
+    keys: ["特斯拉", "Tesla", "Waymo", "FSD", "Autopilot"],
+    topicKeys: ["智驾", "自动驾驶", "撞人", "车祸", "事故", "crash"],
+    topic: "科技",
+    exclude: ["特斯拉", "Tesla", "Waymo", "Autopilot"],
+    queries: [
+      { q: "华为 智驾 事故", lang: "zh" },
+      { q: "国产自动驾驶 撞人", lang: "zh" },
+      { q: "问界 智驾 车祸", lang: "zh" },
+      { q: "小鹏 自动驾驶 事故", lang: "zh" },
+    ],
+    explanation: "海外智驾事故 → 镜像国产智驾同类事故报道",
+  },
+  {
+    keys: ["好莱坞", "迪士尼", "漫威", "皮克斯", "奥斯卡"],
+    topicKeys: ["票房", "电影"],
+    topic: "电影",
+    exclude: ["好莱坞", "迪士尼", "漫威", "Hollywood", "Disney"],
+    queries: [
+      { q: "哪吒 票房", lang: "zh" },
+      { q: "国产动画 票房", lang: "zh" },
+      { q: "主旋律 电影 票房", lang: "zh" },
+    ],
+    explanation: "好莱坞电影话题 → 镜像国产动画/档期票房",
+  },
+];
+
+function matchMirrorRule(q, rules) {
+  let best = null;
+  let bestScore = -1;
+  for (const rule of rules) {
+    const hitKey = rule.keys.some((k) => q.toLowerCase().includes(String(k).toLowerCase()));
+    if (!hitKey) continue;
+    const topicHits = (rule.topicKeys || []).filter((k) => q.toLowerCase().includes(String(k).toLowerCase())).length;
+    const score = 10 + topicHits * 5;
+    if (score > bestScore) {
+      bestScore = score;
+      best = rule;
+    }
+  }
+  return best;
+}
+
+function heuristicPlan(q) {
+  const raw = String(q || "").trim();
+  const domesticHints = ["哪吒", "华为", "比亚迪", "小米", "A股", "沪指", "城投", "解放军", "国漫", "主旋律", "问界", "乾崑"];
+  const overseasHints = ["特斯拉", "Tesla", "Waymo", "苹果", "美军", "北约", "好莱坞", "迪士尼", "漫威", "OpenAI", "美联储", "华尔街", "Autopilot", "FSD"];
+  let domestic = domesticHints.some((k) => raw.includes(k));
+  let overseas = overseasHints.some((k) => raw.toLowerCase().includes(String(k).toLowerCase()));
+
+  const dRule = matchMirrorRule(raw, DOMESTIC_MIRROR);
+  const oRule = matchMirrorRule(raw, OVERSEAS_MIRROR);
+
+  // 优先命中具体镜像规则
+  if (dRule && (!oRule || domestic)) {
+    return {
+      leaning: "domestic",
+      target_side: "right",
+      topic_hint: dRule.topic || "科技",
+      exclude_terms: dRule.exclude || [],
+      explanation: dRule.explanation,
+      queries: dRule.queries,
+    };
+  }
+  if (oRule) {
+    return {
+      leaning: "overseas",
+      target_side: "left",
+      topic_hint: oRule.topic || "科技",
+      exclude_terms: oRule.exclude || [],
+      explanation: oRule.explanation,
+      queries: oRule.queries,
+    };
+  }
+
+  if (!domestic && !overseas) domestic = true;
+
+  if (domestic && !overseas) {
+    // 泛化：抽议题词，拼海外实体，绝不原样复用国内主体词
+    const issue = raw
+      .replace(/华为|比亚迪|小米|哪吒|国产|问界|乾崑/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const issueEn = /撞人|车祸|事故/.test(raw)
+      ? "crash accident"
+      : /智驾|自动驾驶/.test(raw)
+        ? "autonomous driving"
+        : /票房/.test(raw)
+          ? "box office"
+          : "controversy";
+    return {
+      leaning: "domestic",
+      target_side: "right",
+      topic_hint: /电影|票房|哪吒/.test(raw) ? "电影" : "科技",
+      exclude_terms: ["华为", "比亚迪", "小米", "哪吒", "Huawei"],
+      explanation: "国内主体 → 检索海外对照实体的同类新闻",
+      queries: [
+        { q: `Tesla ${issueEn}`, lang: "en" },
+        { q: `Waymo ${issueEn}`, lang: "en" },
+        { q: `特斯拉 ${issue || "争议"}`.trim(), lang: "zh" },
+        { q: `Hollywood ${issueEn}`, lang: "en" },
+      ],
+    };
+  }
+  if (overseas && !domestic) {
+    const issue = raw
+      .replace(/特斯拉|Tesla|Waymo|好莱坞|迪士尼|漫威|苹果|OpenAI|Autopilot|FSD/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return {
+      leaning: "overseas",
+      target_side: "left",
+      topic_hint: "其他",
+      exclude_terms: ["特斯拉", "Tesla", "Waymo", "Hollywood"],
+      explanation: "海外主体 → 检索国内对照实体的同类新闻",
+      queries: [
+        { q: `华为 ${issue || "争议"}`.trim(), lang: "zh" },
+        { q: `国产 ${issue || "智驾"}`.trim(), lang: "zh" },
+        { q: `哪吒 ${issue || "票房"}`.trim(), lang: "zh" },
+      ],
+    };
+  }
+  return {
+    leaning: "unknown",
+    target_side: "right",
+    topic_hint: "其他",
+    exclude_terms: [],
+    explanation: "混合主体，优先检索对侧对照新闻",
+    queries: [
+      { q: "Tesla Autopilot crash", lang: "en" },
+      { q: "特斯拉 自动驾驶 事故", lang: "zh" },
+    ],
+  };
+}
+
+function filterMirroredRows(rows, plan) {
+  const excludes = (plan.exclude_terms || [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
+  if (excludes.length === 0) return rows;
+  const kept = rows.filter((row) => {
+    const hay = `${row.title || ""} ${row.summary || ""} ${row.source || ""}`;
+    return !excludes.some((ex) => hay.toLowerCase().includes(ex.toLowerCase()));
+  });
+  // 过滤过狠时回退，避免空结果
+  return kept.length >= 3 ? kept : rows;
+}
 function jsonResp(status, obj) {
   return new Response(JSON.stringify(obj), {
     status,
@@ -233,11 +442,16 @@ function toYmd(pub) {
   return d.toISOString().slice(0, 10);
 }
 
-async function fetchBingNews(q) {
+async function fetchBingNews(q, lang) {
+  const setlang = lang === "en" ? "en-us" : "zh-hans";
+  const cc = lang === "en" ? "US" : "CN";
   const url =
     "https://www.bing.com/news/search?q=" +
     encodeURIComponent(q) +
-    "&format=RSS&setlang=zh-hans";
+    "&format=RSS&setlang=" +
+    setlang +
+    "&cc=" +
+    cc;
   const resp = await fetch(url, {
     headers: {
       "User-Agent":
@@ -250,7 +464,6 @@ async function fetchBingNews(q) {
 }
 
 async function fetchGoogleNews(q, hl) {
-  const lang = hl === "en" ? "en-US" : "zh-CN";
   const url =
     "https://news.google.com/rss/search?q=" +
     encodeURIComponent(q) +
@@ -271,62 +484,16 @@ async function fetchGoogleNews(q, hl) {
   return parseRss(await resp.text());
 }
 
-function heuristicPlan(q) {
-  const domesticHints = ["哪吒", "华为", "比亚迪", "小米", "A股", "沪指", "城投", "解放军", "国漫", "主旋律"];
-  const overseasHints = ["特斯拉", "苹果", "美军", "北约", "好莱坞", "迪士尼", "漫威", "OpenAI", "美联储", "华尔街"];
-  let domestic = domesticHints.some((k) => q.includes(k));
-  let overseas = overseasHints.some((k) => q.includes(k));
-  if (!domestic && !overseas) {
-    // 默认按国内词处理，去找海外镜像
-    domestic = true;
-  }
-  if (domestic && !overseas) {
-    return {
-      leaning: "domestic",
-      target_side: "right",
-      topic_hint: q.includes("哪吒") || q.includes("电影") ? "电影" : "其他",
-      explanation: "国内主体 → 实时检索海外/对照侧新闻",
-      queries: [
-        { q: q + " 海外 外媒", lang: "zh" },
-        { q: q + " Hollywood OR Disney OR Western media", lang: "en" },
-        { q: q, lang: "en" },
-      ],
-    };
-  }
-  if (overseas && !domestic) {
-    return {
-      leaning: "overseas",
-      target_side: "left",
-      topic_hint: "其他",
-      explanation: "海外主体 → 实时检索中媒相关批评报道",
-      queries: [
-        { q: q + " 中国 评论", lang: "zh" },
-        { q: q + " 外媒 双标", lang: "zh" },
-        { q: q, lang: "zh" },
-      ],
-    };
-  }
-  return {
-    leaning: "unknown",
-    target_side: "right",
-    topic_hint: "其他",
-    explanation: "混合主体，优先检索对侧新闻",
-    queries: [
-      { q: q, lang: "zh" },
-      { q: q, lang: "en" },
-    ],
-  };
-}
-
 async function planWithAi(q, env) {
+  const fallback = { ...heuristicPlan(q), source: "heuristic" };
   const API_KEY = (env && env.AI_API_KEY) || "";
-  if (!API_KEY) return { ...heuristicPlan(q), source: "heuristic" };
+  if (!API_KEY) return fallback;
   const BASE = String((env && env.AI_BASE_URL) || "https://coding.92onegame.com/v1").replace(/\/$/, "");
   const MODEL = (env && env.AI_MODEL) || "auto";
-  const resp = await fetch(`${BASE}/chat/completions`, {
+  const resp = await fetch(BASE + "/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${API_KEY}`,
+      Authorization: "Bearer " + API_KEY,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -338,7 +505,7 @@ async function planWithAi(q, env) {
       ],
     }),
   });
-  if (!resp.ok) return { ...heuristicPlan(q), source: "heuristic" };
+  if (!resp.ok) return fallback;
   const data = await resp.json();
   const content = data?.choices?.[0]?.message?.content || "";
   try {
@@ -357,27 +524,38 @@ async function planWithAi(q, env) {
           .filter((x) => x.q)
           .slice(0, 4)
       : [];
-    if (queries.length === 0) return { ...heuristicPlan(q), source: "heuristic" };
+    if (queries.length === 0) return fallback;
+    const exclude_terms = Array.isArray(plan.exclude_terms)
+      ? plan.exclude_terms.map((x) => String(x || "").trim()).filter(Boolean)
+      : fallback.exclude_terms || [];
+    const joined = queries.map((x) => x.q).join(" ");
+    const leaked = exclude_terms.some((ex) => joined.toLowerCase().includes(ex.toLowerCase()));
+    if (leaked) return fallback;
     return {
       leaning,
       target_side,
-      topic_hint: String(plan.topic_hint || "").trim() || "其他",
-      explanation: String(plan.explanation || "").trim(),
+      topic_hint: String(plan.topic_hint || "").trim() || fallback.topic_hint || "其他",
+      exclude_terms,
+      explanation: String(plan.explanation || "").trim() || fallback.explanation,
       queries,
       source: "ai",
     };
   } catch {
-    return { ...heuristicPlan(q), source: "heuristic" };
+    return fallback;
   }
 }
 
 async function liveSearch(plan) {
   const seen = new Set();
   const out = [];
-  const jobs = (plan.queries || []).slice(0, 4).map(async (query) => {
+  const queries = [...(plan.queries || [])].slice(0, 4);
+  if (plan.target_side === "right") {
+    queries.sort((a, b) => (a.lang === "en" ? 0 : 1) - (b.lang === "en" ? 0 : 1));
+  }
+  const jobs = queries.map(async (query) => {
     const rows = [];
     try {
-      rows.push(...(await fetchBingNews(query.q)));
+      rows.push(...(await fetchBingNews(query.q, query.lang)));
     } catch {
       /* ignore */
     }
@@ -395,10 +573,10 @@ async function liveSearch(plan) {
       if (!key || seen.has(key)) continue;
       seen.add(key);
       out.push(row);
-      if (out.length >= 16) return out;
+      if (out.length >= 24) break;
     }
   }
-  return out;
+  return filterMirroredRows(out, plan).slice(0, 16);
 }
 
 function toCards(rows, plan) {
