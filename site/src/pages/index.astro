@@ -7,7 +7,8 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 
   <nav class="type-filter" id="type-filter" aria-label="类型筛选">
     <button class="chip chip--active" data-topic="全部">全部</button>
-    <button class="chip" data-topic="股票">股票</button>
+    <!-- 显示用零宽字符拆开「股票」，降低微信内置关键词劫持；data-topic 仍为真实主题 -->
+    <button class="chip" data-topic="股票" aria-label="股票">股&#8203;票</button>
     <button class="chip" data-topic="政治">政治</button>
     <button class="chip" data-topic="经济">经济</button>
     <button class="chip" data-topic="社会">社会</button>
@@ -24,7 +25,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
   <!-- 镜像搜索：搜国内词看海外镜像，搜海外词看国内镜像 -->
   <form class="search-bar" id="search-bar" role="search" aria-label="镜像搜索">
     <input class="search-input" id="search-input" type="search"
-      placeholder="搜国内词看海外镜像，搜海外词看国内镜像 · 如：华为智驾 / 特斯拉"
+      placeholder="在线镜像搜索 · 如：华为智驾 / 特斯拉 / A股政策"
       autocomplete="off" />
     <button class="search-submit" id="search-submit" type="submit">镜像搜索</button>
     <button class="search-clear" id="search-clear" type="button" hidden>清除</button>

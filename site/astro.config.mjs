@@ -10,7 +10,17 @@ export default defineConfig({
   output: "static",
   trailingSlash: "ignore",
   build: {
-    // 每日数据文件作为静态资源输出，便于直接访问 JSON 归档
     inlineStylesheets: "auto",
+  },
+  vite: {
+    server: {
+      proxy: {
+        // 本地：先开 node tools/ai_mirror_parse_server.js
+        "/api/mirror-parse": {
+          target: "http://127.0.0.1:8788",
+          changeOrigin: true,
+        },
+      },
+    },
   },
 });

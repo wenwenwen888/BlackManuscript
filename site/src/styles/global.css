@@ -327,6 +327,8 @@ a:hover { text-decoration: underline; }
   gap: 8px;
   margin: 0 0 24px;
   padding: 0;
+  /* 横向滚动时仍允许 chip 点击，避免微信 WebView 吞掉 tap */
+  touch-action: pan-x;
 }
 .type-filter .chip {
   display: inline-block;
@@ -342,6 +344,12 @@ a:hover { text-decoration: underline; }
   line-height: 1.4;
   white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
 }
 .type-filter .chip:hover {
   color: var(--color-ink);
@@ -402,6 +410,12 @@ a:hover { text-decoration: underline; }
 .search-results__back:hover {
   opacity: 0.85;
 }
+.search-submit:disabled,
+.search-submit.is-loading {
+  opacity: 0.55;
+  cursor: wait;
+  pointer-events: none;
+}
 .search-clear {
   color: var(--color-ink-muted);
   background: var(--color-paper);
@@ -436,6 +450,16 @@ a:hover { text-decoration: underline; }
 .search-results__summary .q {
   color: var(--color-left);
 }
+.search-results__summary .hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 400;
+  font-family: var(--font-sans);
+  color: var(--color-ink-muted);
+  letter-spacing: 0;
+  line-height: 1.45;
+}
 .search-results__summary .tag {
   display: inline-block;
   margin-left: 8px;
@@ -449,6 +473,12 @@ a:hover { text-decoration: underline; }
   letter-spacing: 0;
 }
 .search-results__summary .tag--left { background: var(--color-left); }
+.search-results__summary .tag--ai {
+  background: transparent;
+  color: var(--color-ink-muted);
+  border: 1px solid var(--color-divider);
+  font-weight: 500;
+}
 .search-results__back {
   font-size: 13px;
   font-weight: 400;
