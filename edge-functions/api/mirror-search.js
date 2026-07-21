@@ -51,18 +51,113 @@ function extractJson(text) {
   return s;
 }
 
-function stripHtml(s) {
+function decodeEntities(s) {
   return String(s || "")
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
     .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => {
+      try {
+        return String.fromCodePoint(parseInt(h, 16));
+      } catch {
+        return " ";
+      }
+    })
+    .replace(/&#(\d+);/g, (_, n) => {
+      try {
+        return String.fromCodePoint(Number(n));
+      } catch {
+        return " ";
+      }
+    });
+}
+
+function stripHtml(s) {
+  let t = String(s || "");
+  t = t.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
+  // Bing 等源常把 HTML 实体编码后再塞进 description，需先解码再剥标签，多轮处理
+  for (let i = 0; i < 4; i++) {
+    t = decodeEntities(t);
+    t = t.replace(/<script[\s\S]*?<\/script>/gi, " ");
+    t = t.replace(/<style[\s\S]*?<\/style>/gi, " ");
+    t = t.replace(/<[^>]+>/g, " ");
+  }
+  return t.replace(/\s+/g, " ").trim();
+}
+
+function truncate(s, n) {
+  const t = String(s || "").trim();
+  if (t.length <= n) return t;
+  return t.slice(0, n - 1).trim() + "…";
+}
+
+function makeSpicyQuote(title, side, i) {
+  const tails = [
+    "——现场如此。",
+    "——账本如此。",
+    "——热搜如此。",
+    "——盘面如此。",
+    "——镜头如此。",
+    "——余波如此。",
+    "——口径如此。",
+    "——排期如此。",
+  ];
+  const seeds = [
+    "热闹很满，问题很空",
+    "标题很硬，细节很软",
+    "流量先到，事实后补",
+    "掌声整齐，追问缺席",
+    "叙事很忙，责任很闲",
+    "站队很快，核查很慢",
+  ];
+  const seed = seeds[i % seeds.length];
+  const tail = tails[i % tails.length];
+  const sideHint = side === "left" ? "外媒叙事" : "中媒镜像";
+  return `${seed}（${sideHint}）${tail}`;
+}
+
+async function spiceQuotesWithAi(items, env) {
+  const API_KEY = (env && env.AI_API_KEY) || "";
+  if (!API_KEY || items.length === 0) return items;
+  const BASE = String((env && env.AI_BASE_URL) || "https://coding.92onegame.com/v1").replace(/\/$/, "");
+  const MODEL = (env && env.AI_MODEL) || "auto";
+  const sample = items.slice(0, 12);
+  const payload = sample.map((it, i) => `${i + 1}. ${it.title_cn}`).join("\n");
+  try {
+    const resp = await fetch(`${BASE}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        temperature: 0.6,
+        messages: [
+          {
+            role: "system",
+            content:
+              "你是嘲讽日报辣评写手。为每条新闻标题写一句中文讽刺辣评，15~28字，末尾用「——现场如此。」这类短收束。只输出 JSON 字符串数组，顺序与输入一致，不要 markdown。",
+          },
+          { role: "user", content: payload },
+        ],
+      }),
+    });
+    if (!resp.ok) return items;
+    const data = await resp.json();
+    const content = data?.choices?.[0]?.message?.content || "";
+    const arr = JSON.parse(extractJson(content));
+    if (!Array.isArray(arr)) return items;
+    return items.map((it, i) => ({
+      ...it,
+      quote_cn: i < arr.length && arr[i] ? String(arr[i]).trim() : it.quote_cn,
+    }));
+  } catch {
+    return items;
+  }
 }
 
 function tagText(block, tag) {
@@ -81,19 +176,36 @@ function parseRss(xml) {
       const gu = chunk.match(/<guid[^>]*>([\s\S]*?)<\/guid>/i);
       if (gu) link = stripHtml(gu[1]);
     }
-    const summary = tagText(chunk, "description");
+    // 先取原始 description，再清洗；尽量抽出媒体名
+    const rawDesc = (() => {
+      const m = chunk.match(/<description[^>]*>([\s\S]*?)<\/description>/i);
+      return m ? m[1] : "";
+    })();
+    let summary = stripHtml(rawDesc);
+    let source = tagText(chunk, "source");
+    if (!source) {
+      const font = rawDesc.match(/<font[^>]*>([\s\S]*?)<\/font>/i);
+      if (font) source = stripHtml(font[1]);
+    }
+    if (!source) {
+      try {
+        source = new URL(link).hostname.replace(/^www\./, "");
+      } catch {
+        source = "web";
+      }
+    }
+    // Bing 跳转链：展示名不要用 bing.com
+    if (/bing\.com/i.test(source)) source = "Bing News";
+    if (/news\.google\.com/i.test(source)) source = "Google News";
     const pub = tagText(chunk, "pubDate");
-    const source =
-      tagText(chunk, "source") ||
-      (() => {
-        try {
-          return new URL(link).hostname.replace(/^www\./, "");
-        } catch {
-          return "web";
-        }
-      })();
     if (!title || !link) continue;
-    items.push({ title, link, summary, pub, source });
+    items.push({
+      title: truncate(title, 80),
+      link,
+      summary: truncate(summary, 140) || "点击查看原文报道。",
+      pub,
+      source: truncate(source, 32),
+    });
   }
   return items;
 }
@@ -278,7 +390,7 @@ async function liveSearch(plan) {
       if (!key || seen.has(key)) continue;
       seen.add(key);
       out.push(row);
-      if (out.length >= 24) return out;
+      if (out.length >= 16) return out;
     }
   }
   return out;
@@ -286,7 +398,7 @@ async function liveSearch(plan) {
 
 function toCards(rows, plan) {
   const side = plan.target_side === "left" ? "left" : "right";
-  return rows.map((row, i) => {
+  return rows.slice(0, 16).map((row, i) => {
     const host = (() => {
       try {
         return new URL(row.link).hostname.replace(/^www\./, "");
@@ -294,17 +406,19 @@ function toCards(rows, plan) {
         return row.source || "web";
       }
     })();
+    const title = truncate(stripHtml(row.title), 80);
+    const summary = truncate(stripHtml(row.summary), 140) || "点击查看原文报道。";
     return {
       side,
-      title_cn: row.title,
-      summary_cn: row.summary || "实时检索结果，点击查看原文。",
-      quote_cn: "",
-      source: row.source || host,
+      title_cn: title,
+      summary_cn: summary,
+      quote_cn: makeSpicyQuote(title, side, i),
+      source: truncate(stripHtml(row.source || host), 32),
       source_url: row.link,
       source_country: guessCountry(host, side),
       published: toYmd(row.pub),
       topic: plan.topic_hint || "其他",
-      absurdity: 5,
+      absurdity: 4 + (i % 4),
       mirror_issue: "live_search",
       live: true,
       rank: i + 1,
@@ -324,7 +438,8 @@ async function handlePost(request, env) {
 
   const plan = await planWithAi(q, env || {});
   const rows = await liveSearch(plan);
-  const items = toCards(rows, plan);
+  let items = toCards(rows, plan);
+  items = await spiceQuotesWithAi(items, env || {});
   return jsonResp(200, {
     q,
     leaning: plan.leaning,

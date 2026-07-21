@@ -232,6 +232,8 @@ a:hover { text-decoration: underline; }
   line-height: 1.4;
   margin: 0 0 10px;
   letter-spacing: 0.5px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .news-card .title:hover {
   text-decoration: underline;
@@ -242,6 +244,13 @@ a:hover { text-decoration: underline; }
   color: var(--color-ink);
   margin: 0 0 12px;
   line-height: 1.7;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.news-card .source-bar .media {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
 }
 
 /* 金句高亮块 */
@@ -257,6 +266,21 @@ a:hover { text-decoration: underline; }
   color: var(--color-ink);
   position: relative;
   font-style: italic;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.news-card .quote .quote-label {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 1px 8px;
+  font-style: normal;
+  font-size: 11px;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #fff;
+  background: var(--color-ink);
+  border-radius: 8px;
 }
 .versus-column.left .news-card .quote {
   border-left-color: var(--color-left);
@@ -488,7 +512,16 @@ a:hover { text-decoration: underline; }
   grid-template-columns: 1fr 1fr;
   gap: 18px;
 }
-.search-results__list .news-card { margin: 0; }
+.search-results__list .news-card { margin: 0; min-width: 0; overflow: hidden; }
+.search-results__list .news-card .meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.search-results__list .news-card .meta .share-btn {
+  flex-shrink: 0;
+}
 .search-results__empty {
   grid-column: 1 / -1;
   text-align: center;

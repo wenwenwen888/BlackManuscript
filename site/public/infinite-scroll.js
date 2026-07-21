@@ -178,16 +178,23 @@
   }
 
   // globalIndex: 该 item 在 filteredItems 里的下标，用于分享按钮定位；h2h 卡片用负下标占位
-  function renderCard(item, globalIndex, extraClass) {
+  // shareMode: "idx" | "h2h" | "search"
+  function renderCard(item, globalIndex, extraClass, shareMode) {
+    const mode = shareMode || (globalIndex >= 0 ? "idx" : "h2h");
     const quoteHtml = item.quote_cn
       ? `<blockquote class="quote">
+           <div class="quote-label">辣评</div>
            <span class="quote-mark">"</span>${escapeHtml(item.quote_cn)}<span class="quote-mark">"</span>
          </blockquote>`
       : "";
-    const shareBtn =
-      globalIndex >= 0
-        ? `<button class="share-btn" data-idx="${globalIndex}" type="button" aria-label="分享这张卡片">分享</button>`
-        : `<button class="share-btn" data-h2h="${globalIndex}" type="button" aria-label="分享这张卡片">分享</button>`;
+    let shareBtn = "";
+    if (mode === "search") {
+      shareBtn = `<button class="share-btn" data-search-idx="${globalIndex}" type="button" aria-label="分享这张卡片">分享</button>`;
+    } else if (mode === "idx") {
+      shareBtn = `<button class="share-btn" data-idx="${globalIndex}" type="button" aria-label="分享这张卡片">分享</button>`;
+    } else {
+      shareBtn = `<button class="share-btn" data-h2h="${globalIndex}" type="button" aria-label="分享这张卡片">分享</button>`;
+    }
     const cls = extraClass
       ? `news-card news-card--entering ${extraClass}`
       : "news-card news-card--entering";
@@ -625,10 +632,37 @@
     }
   }
 
-  // 搜索卡片：复用 renderCard 视觉，分享按钮用 data-search-idx 定位
+  function cleanDisplayText(s, maxLen) {
+    let t = String(s || "");
+    for (let i = 0; i < 4; i++) {
+      t = t
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&amp;/gi, "&")
+        .replace(/&lt;/gi, "<")
+        .replace(/&gt;/gi, ">")
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/g, "'");
+      t = t.replace(/<[^>]+>/g, " ");
+    }
+    t = t.replace(/\s+/g, " ").trim();
+    if (maxLen && t.length > maxLen) t = t.slice(0, maxLen - 1).trim() + "…";
+    return t;
+  }
+
+  // 搜索卡片：强制清洗文本 + 辣评 + 分享按钮
   function renderSearchCard(item, idx) {
-    const html = renderCard(item, -9999, "news-card--search");
-    return html.replace('data-h2h="-9999"', 'data-search-idx="' + idx + '"');
+    const cleaned = {
+      ...item,
+      title_cn: cleanDisplayText(item.title_cn, 80),
+      summary_cn: cleanDisplayText(item.summary_cn, 140) || "点击查看原文报道。",
+      quote_cn:
+        cleanDisplayText(item.quote_cn, 60) ||
+        "标题很热闹，追问很安静——现场如此。",
+      source: cleanDisplayText(item.source, 32) || "web",
+      topic: cleanDisplayText(item.topic, 12) || "其他",
+      absurdity: item.absurdity || 5,
+    };
+    return renderCard(cleaned, idx, "news-card--search", "search");
   }
 
   function paintSearchResults(query, res) {
