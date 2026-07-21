@@ -383,6 +383,9 @@
     "军演": ["美军"],
     "两会": ["国会", "议会"],
     "城投": ["华尔街"],
+    "哪吒": ["好莱坞", "迪士尼", "漫威", "皮克斯"],
+    "国漫": ["好莱坞", "迪士尼", "漫威"],
+    "主旋律": ["好莱坞", "奥斯卡"],
   };
   const OVERSEAS_TO_DOMESTIC = {
     "特斯拉": ["华为", "比亚迪", "国产新能源"],
@@ -393,12 +396,42 @@
     "英伟达": ["国产芯片"],
     "美军": ["解放军", "海军"],
     "北约": ["解放军"],
-    "好莱坞": ["国漫"],
+    "好莱坞": ["国漫", "哪吒", "主旋律"],
+    "迪士尼": ["国漫", "哪吒"],
+    "漫威": ["国漫", "哪吒"],
+    "皮克斯": ["国漫", "哪吒"],
+    "奥斯卡": ["主旋律", "国漫"],
     "硅谷": ["国产芯片", "国产大模型"],
     "美联储": ["央行"],
     "华尔街": ["城投"],
     "谷歌": ["国产大模型"],
   };
+
+  const TOPIC_HINTS = [
+    { keys: ["哪吒", "电影", "票房", "档期", "好莱坞", "国漫", "动画", "迪士尼", "漫威", "奥斯卡", "主旋律"], topic: "电影" },
+    { keys: ["明星", "饭圈", "流量", "塌房", "娱乐", "网红"], topic: "娱乐" },
+    { keys: ["股票", "A股", "沪指", "纳斯达克", "美股", "IPO"], topic: "股票" },
+    { keys: ["芯片", "大模型", "智驾", "华为", "特斯拉", "OpenAI"], topic: "科技" },
+    { keys: ["美军", "解放军", "军演", "航母", "北约"], topic: "军事" },
+    { keys: ["城投", "楼市", "美债", "美联储", "房价"], topic: "经济" },
+  ];
+
+  function inferTopicHint(q) {
+    for (const row of TOPIC_HINTS) {
+      if (row.keys.some((k) => q.includes(k))) return row.topic;
+    }
+    return "";
+  }
+
+  function topicFallbackItems(targetSide, topicHint, limit) {
+    if (!topicHint) return [];
+    let pool = allItems.filter((it) => it.topic === topicHint);
+    if (targetSide) {
+      const sidePool = pool.filter((it) => it.side === targetSide);
+      if (sidePool.length > 0) pool = sidePool;
+    }
+    return pool.slice(0, limit || 12);
+  }
 
   function detectLeaning(q) {
     let domestic = false, overseas = false;
@@ -473,16 +506,29 @@
         if (filtered.length > 0) arr = filtered;
       }
       const MAX_RESULTS = 24;
-      if (arr.length > MAX_RESULTS) arr = arr.slice(0, MAX_RESULTS);
+    if (arr.length > MAX_RESULTS) arr = arr.slice(0, MAX_RESULTS);
+    // 字面匹配为空时：按话题兜底（如「哪吒」→ 电影镜像）
+    if (arr.length === 0) {
+      const hint = plan.topic_hint || inferTopicHint(q);
+      arr = topicFallbackItems(targetSide, hint, MAX_RESULTS);
       return {
         items: arr,
         leaning,
         targetSide,
         directCount: matches.length,
         source: "ai",
-        explanation: plan.explanation || "",
+        explanation: plan.explanation || (hint ? `按「${hint}」话题镜像兜底` : ""),
       };
     }
+    return {
+      items: arr,
+      leaning,
+      targetSide,
+      directCount: matches.length,
+      source: "ai",
+      explanation: plan.explanation || "",
+    };
+  }
 
     // === 本地词典兜底 ===
     const leaning = detectLeaning(q);
@@ -528,6 +574,18 @@
     }
     const MAX_RESULTS = 24;
     if (arr.length > MAX_RESULTS) arr = arr.slice(0, MAX_RESULTS);
+    if (arr.length === 0) {
+      const hint = inferTopicHint(q);
+      arr = topicFallbackItems(targetSide, hint, MAX_RESULTS);
+      return {
+        items: arr,
+        leaning,
+        targetSide,
+        directCount: directMatches.length,
+        source: "local",
+        explanation: hint ? `按「${hint}」话题镜像兜底` : "",
+      };
+    }
     return {
       items: arr,
       leaning,
