@@ -1,0 +1,8 @@
+{
+  "name": "BlackManuscript",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "nodeVersion": "20.18.0",
+  "rootDirectory": "site"
+}
