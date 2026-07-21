@@ -95,28 +95,29 @@ function truncate(s, n) {
 }
 
 function makeSpicyQuote(title, side, i) {
-  const tails = [
-    "——现场如此。",
-    "——账本如此。",
-    "——热搜如此。",
-    "——盘面如此。",
-    "——镜头如此。",
-    "——余波如此。",
-    "——口径如此。",
-    "——排期如此。",
+  // 自然短评，不再硬套「——现场如此」收束
+  const domestic = [
+    "票房数字会说话，叙事更会化妆。",
+    "热闹是真的，追问常常迟到。",
+    "标题先高潮，细节后补课。",
+    "胜利声明很满，账本未必同步。",
+    "流量到了，问题还在排队。",
+    "掌声整齐时，最该听沉默。",
+    "神话好写，复盘难写。",
+    "热搜有保质期，争议没有。",
   ];
-  const seeds = [
-    "热闹很满，问题很空",
-    "标题很硬，细节很软",
-    "流量先到，事实后补",
-    "掌声整齐，追问缺席",
-    "叙事很忙，责任很闲",
-    "站队很快，核查很慢",
+  const overseas = [
+    "外媒镜头很利，语境常常裁切。",
+    "立场先入座，事实后入座。",
+    "批评很响亮，对照很选择性。",
+    "故事好卖，完整度另算。",
+    "标题有锋芒，背景常缺席。",
+    "叙事很忙，复杂性很闲。",
+    "结论先到，材料后补。",
+    "热闹的是议题，安静的是证据。",
   ];
-  const seed = seeds[i % seeds.length];
-  const tail = tails[i % tails.length];
-  const sideHint = side === "left" ? "外媒叙事" : "中媒镜像";
-  return `${seed}（${sideHint}）${tail}`;
+  const pool = side === "left" ? overseas : domestic;
+  return pool[i % pool.length];
 }
 
 async function spiceQuotesWithAi(items, env) {
@@ -135,12 +136,12 @@ async function spiceQuotesWithAi(items, env) {
       },
       body: JSON.stringify({
         model: MODEL,
-        temperature: 0.6,
+        temperature: 0.7,
         messages: [
           {
             role: "system",
             content:
-              "你是嘲讽日报辣评写手。为每条新闻标题写一句中文讽刺辣评，15~28字，末尾用「——现场如此。」这类短收束。只输出 JSON 字符串数组，顺序与输入一致，不要 markdown。",
+              "你是嘲讽日报的辣评写手。根据每条新闻标题，写一句自然、口语化的中文讽刺短评。要求：12~28字；像人随口吐槽；不要用「——现场如此」「——账本如此」这类固定收束；不要加括号标签如「中媒镜像」；不要引号；只输出 JSON 字符串数组，顺序与输入一致。",
           },
           { role: "user", content: payload },
         ],
@@ -151,10 +152,14 @@ async function spiceQuotesWithAi(items, env) {
     const content = data?.choices?.[0]?.message?.content || "";
     const arr = JSON.parse(extractJson(content));
     if (!Array.isArray(arr)) return items;
-    return items.map((it, i) => ({
-      ...it,
-      quote_cn: i < arr.length && arr[i] ? String(arr[i]).trim() : it.quote_cn,
-    }));
+    return items.map((it, i) => {
+      let q = i < arr.length && arr[i] ? String(arr[i]).trim() : "";
+      q = q.replace(/^["「『]|["」』]$/g, "").trim();
+      // 清掉旧模板尾巴
+      q = q.replace(/（[^）]*镜像[^）]*）/g, "").replace(/——[^。]*如此。?/g, "").trim();
+      if (!q || q.length < 6) return it;
+      return { ...it, quote_cn: q.slice(0, 40) };
+    });
   } catch {
     return items;
   }

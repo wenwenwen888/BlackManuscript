@@ -656,8 +656,8 @@
       title_cn: cleanDisplayText(item.title_cn, 80),
       summary_cn: cleanDisplayText(item.summary_cn, 140) || "点击查看原文报道。",
       quote_cn:
-        cleanDisplayText(item.quote_cn, 60) ||
-        "标题很热闹，追问很安静——现场如此。",
+        cleanDisplayText(item.quote_cn, 40) ||
+        "热闹是真的，追问常常迟到。",
       source: cleanDisplayText(item.source, 32) || "web",
       topic: cleanDisplayText(item.topic, 12) || "其他",
       absurdity: item.absurdity || 5,
